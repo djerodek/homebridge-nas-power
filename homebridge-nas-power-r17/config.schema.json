@@ -1,0 +1,156 @@
+{
+  "pluginAlias": "NasPower",
+  "pluginType": "platform",
+  "singular": false,
+  "schema": {
+    "type": "object",
+    "required": ["name"],
+    "properties": {
+      "name": {
+        "title": "Platform Name",
+        "type": "string",
+        "default": "NAS Power"
+      },
+      "devices": {
+        "title": "NAS Devices",
+        "type": "array",
+        "items": {
+          "title": "NAS Device",
+          "type": "object",
+          "required": ["name", "host", "username"],
+          "properties": {
+            "name": {
+              "title": "Display Name",
+              "type": "string"
+            },
+            "host": {
+              "title": "IP Address or Hostname",
+              "type": "string",
+              "minLength": 1,
+              "description": "Local IP address (e.g. 192.168.1.100) or hostname of the NAS."
+            },
+            "mac": {
+              "title": "MAC Address (for WOL)",
+              "type": "string",
+              "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$",
+              "description": "MAC address used for Wake-on-LAN. Optional — if omitted, power-on will not be available.",
+              "placeholder": "AA:BB:CC:DD:EE:FF"
+            },
+            "port": {
+              "title": "SSH Port",
+              "type": "integer",
+              "default": 22,
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "username": {
+              "title": "SSH Username",
+              "type": "string"
+            },
+            "password": {
+              "title": "SSH Password",
+              "type": "string",
+              "format": "password",
+              "minLength": 1,
+              "description": "SSH password. Required if privateKeyPath is not set. Both may be supplied; private key takes priority."
+            },
+            "privateKeyPath": {
+              "title": "SSH Private Key Path",
+              "type": "string",
+              "minLength": 1,
+              "description": "Absolute path to an SSH private key file. Recommended over password auth.",
+              "placeholder": "/home/homebridge/.ssh/id_ed25519"
+            },
+            "passphrase": {
+              "title": "Private Key Passphrase",
+              "type": "string",
+              "format": "password",
+              "description": "Passphrase for the private key, if encrypted."
+            },
+            "shutdownCommand": {
+              "title": "Shutdown Command",
+              "type": "string",
+              "default": "sudo shutdown -h now",
+              "description": "Command run over SSH to shut down the NAS. Only use trusted values — it is executed directly on the NAS without sanitization."
+            },
+            "pollInterval": {
+              "title": "Poll Interval (seconds)",
+              "type": "integer",
+              "default": 30,
+              "minimum": 5,
+              "maximum": 86400,
+              "description": "How often to check NAS power state via SSH port check. Min 5s, max 86400s (24h)."
+            },
+            "wolVerifyDelay": {
+              "title": "WOL Verify Delay (seconds)",
+              "type": "integer",
+              "default": 10,
+              "minimum": 1,
+              "maximum": 300,
+              "description": "How long to wait after sending WOL before checking if the NAS has booted. Increase for slow-booting hardware."
+            },
+            "shutdownCooldownDelay": {
+              "title": "Shutdown Cooldown Delay (seconds)",
+              "type": "integer",
+              "default": 15,
+              "minimum": 1,
+              "maximum": 300,
+              "description": "How long to suppress polling after a shutdown command. During this window, rapid power-on will not be detected until the cooldown expires. Default 15s covers most NAS shutdown speeds; increase for slower hardware."
+            },
+            "wolBroadcastAddress": {
+              "title": "WOL Broadcast Address",
+              "type": "string",
+              "default": "255.255.255.255",
+              "pattern": "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$",
+              "description": "Broadcast address for WOL magic packet. Change if your NAS is on a different VLAN or subnet.",
+              "placeholder": "255.255.255.255"
+            },
+            "knownHostsPath": {
+              "title": "Known Hosts File Path",
+              "type": "string",
+              "description": "Path to store verified SSH host fingerprints. Defaults to $HOMEBRIDGE_USER_STORAGE_PATH/nas-power-known-hosts.",
+              "placeholder": "/home/homebridge/.homebridge/nas-power-known-hosts"
+            },
+            "execTimeout": {
+              "title": "SSH Exec Timeout (seconds)",
+              "type": "integer",
+              "default": 30,
+              "minimum": 5,
+              "maximum": 300,
+              "description": "How long to wait for the SSH shutdown command to complete before treating it as a timeout. Increase for slow-shutting NAS hardware."
+            },
+            "uuidOverride": {
+              "title": "UUID Override",
+              "type": "string",
+              "description": "Advanced: manually specify the seed string for this device's HomeKit UUID. Use when two physical devices share the same MAC address and need to coexist in the same config."
+            },
+            "manufacturer": {
+              "title": "Manufacturer",
+              "type": "string",
+              "description": "Shown in HomeKit accessory info. Defaults to 'OpenMediaVault'."
+            },
+            "model": {
+              "title": "Model",
+              "type": "string",
+              "description": "Shown in HomeKit accessory info. Defaults to 'NAS'."
+            },
+            "firmwareRevision": {
+              "title": "Firmware Revision",
+              "type": "string",
+              "description": "Optional firmware version shown in HomeKit accessory info."
+            },
+            "hardwareRevision": {
+              "title": "Hardware Revision",
+              "type": "string",
+              "description": "Optional hardware version shown in HomeKit accessory info."
+            }
+          },
+          "anyOf": [
+            { "required": ["password"] },
+            { "required": ["privateKeyPath"] }
+          ]
+        }
+      }
+    }
+  }
+}
