@@ -42,9 +42,9 @@ export class SshManager {
     this.host = opts.host;
     this.port = opts.port;
     this.username = opts.username;
-    this.password = opts.password;
-    this.privateKeyPath = opts.privateKeyPath;
-    this.passphrase = opts.passphrase;
+    if (opts.password !== undefined) this.password = opts.password;
+    if (opts.privateKeyPath !== undefined) this.privateKeyPath = opts.privateKeyPath;
+    if (opts.passphrase !== undefined) this.passphrase = opts.passphrase;
     // Treat empty/whitespace path as unset — fall back to default
     this.knownHostsPath = (opts.knownHostsPath && opts.knownHostsPath.trim() !== '')
       ? opts.knownHostsPath
