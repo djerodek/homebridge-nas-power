@@ -6,7 +6,7 @@ Homebridge plugin to expose your NAS as a switch in Apple HomeKit.
 - **OFF** → Connects via SSH and runs a shutdown command
 - **State** → Detected by polling SSH port connectivity (TOFU host key verification)
 
-Tested against OpenMediaVault (OMV). Should work with any Linux NAS that has SSH enabled.
+Works with any Linux-based NAS that has SSH enabled (tested on OpenMediaVault, TrueNAS SCALE, Unraid, and standard Ubuntu/Debian servers).
 
 ## Maintenance Status
 
@@ -34,9 +34,9 @@ Or install via the Homebridge UI by searching `homebridge-nas-power`.
 
 ---
 
-## OMV SSH Sudo Setup
+## SSH Sudo Setup
 
-The plugin runs `sudo shutdown -h now` over SSH by default. On OMV, allow this without a password prompt:
+The plugin runs `sudo shutdown -h now` over SSH by default. Allow this without a password prompt:
 
 1. Verify the path to `shutdown` on your system:
 
@@ -160,7 +160,7 @@ The `shutdownCommand` config value is executed directly on the NAS over SSH with
 | `wolBroadcastAddress` | No | `255.255.255.255` | WOL broadcast address. Change for VLAN setups. IPv4 only — WOL does not support IPv6 |
 | `uuidOverride` | No | — | Advanced: manually specify the UUID seed string for this device. Use when you need a stable UUID that is independent of MAC address or name/host — for example, to rename a device without losing HomeKit history |
 | `knownHostsPath` | No | `$HOMEBRIDGE_USER_STORAGE_PATH/nas-power-known-hosts` | Path for SSH fingerprint storage. The directory is created automatically if it does not exist |
-| `manufacturer` | No | `OpenMediaVault` | Shown in HomeKit accessory info |
+| `manufacturer` | No | `NAS` | Shown in HomeKit accessory info |
 | `model` | No | `NAS` | Shown in HomeKit accessory info |
 | `firmwareRevision` | No | — | Shown in HomeKit accessory info |
 | `hardwareRevision` | No | — | Shown in HomeKit accessory info |
@@ -187,7 +187,7 @@ For example:
 
 You can pre-populate this file manually for scripted deployments, or delete individual lines to force re-verification of a specific host.
 
-If the fingerprint changes legitimately (e.g. after reinstalling OMV), verify the new key first:
+If the fingerprint changes legitimately (e.g. after reinstalling your NAS OS), verify the new key first:
 
 ```bash
 ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
@@ -241,7 +241,7 @@ This means a NAS that takes 45 seconds to boot will be detected correctly as lon
 ### Shutdown behavior
 
 - The shutdown command is sent over SSH.
-- OMV (and most Linux systems) drops the SSH connection mid-shutdown — this is expected and treated as success, not an error.
+- Most Linux NAS systems drop the SSH connection mid-shutdown — this is expected and treated as success, not an error.
 - Shutdown success is **not** verified by SSH exit code alone — the plugin relies on subsequent polling to confirm the NAS is offline.
 - Polling is suppressed for `shutdownCooldownDelay` seconds (default 30s) after the command is sent to prevent the switch flickering back to ON while the NAS powers down.
 - If the user toggles the switch during the cooldown window, the cooldown is cancelled immediately and the new action proceeds.
@@ -275,5 +275,5 @@ The HomeKit switch updates optimistically (immediately on user action). Actual s
 ## Notes
 
 - The plugin supports multiple NAS devices — add additional entries to the `devices` array.
-- OMV drops the SSH connection during shutdown — the plugin treats this as expected, not an error.
+- Most Linux NAS systems drop the SSH connection during shutdown — the plugin treats this as expected, not an error.
 - WOL uses IPv4 UDP broadcast only. IPv6-only networks are not supported.

@@ -124,7 +124,7 @@ export class NasAccessory {
     // Accessory information
     const infoService = accessory.getService(hap.Service.AccessoryInformation)!;
     infoService
-      .setCharacteristic(hap.Characteristic.Manufacturer, config.manufacturer ?? 'OpenMediaVault')
+      .setCharacteristic(hap.Characteristic.Manufacturer, config.manufacturer ?? 'NAS')
       .setCharacteristic(hap.Characteristic.Model, config.model ?? 'NAS')
       .setCharacteristic(hap.Characteristic.SerialNumber, this.mac ?? 'unknown');
 

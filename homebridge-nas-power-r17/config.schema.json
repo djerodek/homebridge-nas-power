@@ -127,7 +127,7 @@
             "manufacturer": {
               "title": "Manufacturer",
               "type": "string",
-              "description": "Shown in HomeKit accessory info. Defaults to 'OpenMediaVault'."
+              "description": "Shown in HomeKit accessory info. Defaults to 'NAS'."
             },
             "model": {
               "title": "Model",

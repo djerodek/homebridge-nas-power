@@ -1,7 +1,7 @@
 {
   "name": "homebridge-nas-power",
-  "version": "0.1.1",
-  "description": "Homebridge plugin to control NAS power via Wake-on-LAN and SSH shutdown, with SSH host key verification.",
+  "version": "0.1.2",
+  "description": "Homebridge plugin to control NAS power via Wake-on-LAN and SSH shutdown. Works with any Linux-based NAS. Includes SSH host key verification.",
   "main": "dist/index.js",
   "license": "MIT",
   "author": "Djerodek",
@@ -31,8 +31,7 @@
     "wol",
     "wake-on-lan",
     "ssh",
-    "openmediavault",
-    "omv"
+    "nas-power"
   ],
   "engines": {
     "node": ">=18.0.0",
