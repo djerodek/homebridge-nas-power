@@ -50,7 +50,8 @@ class NasAccessory {
             throw new Error(`[NasPower] Device "${config.name}" requires either "password" or "privateKeyPath".`);
         }
         this.name = config.name;
-        this.mac = config.mac;
+        if (config.mac !== undefined)
+            this.mac = config.mac;
         this.shutdownCommand = config.shutdownCommand ?? 'sudo shutdown -h now';
         this.wolBroadcastAddress = config.wolBroadcastAddress ?? '255.255.255.255';
         const rawVerifyDelay = Number(config.wolVerifyDelay);
@@ -75,11 +76,11 @@ class NasAccessory {
             host: config.host,
             port: config.port ?? 22,
             username: config.username,
-            password: config.password,
-            privateKeyPath: config.privateKeyPath,
-            passphrase: config.passphrase,
-            knownHostsPath: config.knownHostsPath,
-            execTimeout: config.execTimeout,
+            ...(config.password !== undefined && { password: config.password }),
+            ...(config.privateKeyPath !== undefined && { privateKeyPath: config.privateKeyPath }),
+            ...(config.passphrase !== undefined && { passphrase: config.passphrase }),
+            ...(config.knownHostsPath !== undefined && { knownHostsPath: config.knownHostsPath }),
+            ...(config.execTimeout !== undefined && { execTimeout: config.execTimeout }),
             log: platformLog,
         });
         // Accessory information

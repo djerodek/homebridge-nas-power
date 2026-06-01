@@ -37,7 +37,17 @@ class NasPowerPlatform {
     }
     discoverDevices() {
         const devices = this.config.devices ?? [];
-        const configuredUuids = new Set(devices.map(d => this.api.hap.uuid.generate(d.uuidOverride ?? d.mac ?? d.name + d.host)));
+        // Build safe UUID source — coerce to string to prevent NaN crashing uuid.generate()
+        const safeUuidSource = (d) => {
+            const raw = d.uuidOverride ?? d.mac ?? (d.name + d.host);
+            if (raw === undefined || raw === null)
+                return null;
+            return typeof raw === 'string' ? raw : String(raw);
+        };
+        const configuredUuids = new Set(devices
+            .map(d => safeUuidSource(d))
+            .filter((s) => s !== null)
+            .map(s => this.api.hap.uuid.generate(s)));
         // Remove accessories no longer in config
         const stale = this.cachedAccessories.filter(a => !configuredUuids.has(a.UUID));
         if (stale.length > 0) {
@@ -45,7 +55,23 @@ class NasPowerPlatform {
             this.unregisterPlatformAccessories(stale);
         }
         for (const device of devices) {
-            const uuid = this.api.hap.uuid.generate(device.uuidOverride ?? device.mac ?? device.name + device.host);
+            // Validate required string fields before doing anything else —
+            // numeric or missing values cause uuid.generate() to receive NaN and crash.
+            if (!device.name || typeof device.name !== 'string') {
+                this.log.error(`[Platform] Device missing a valid "name" (must be a string). Found: ${device.name}. Skipping.`);
+                continue;
+            }
+            if (!device.host || typeof device.host !== 'string') {
+                this.log.error(`[Platform] Device "${device.name}" missing a valid "host" (must be a string). Skipping.`);
+                continue;
+            }
+            // Build UUID source and coerce to string to handle any non-string config values
+            const uuidSrc = safeUuidSource(device);
+            if (uuidSrc === null) {
+                this.log.error(`[Platform] Device "${device.name}" has no valid identifier (uuidOverride, mac, or name+host). Skipping.`);
+                continue;
+            }
+            const uuid = this.api.hap.uuid.generate(uuidSrc);
             // Duplicate UUID detection — same MAC or identical name+host combination.
             // Rather than silently overwriting (which leaves ghost polling timers), we
             // log a clear error and skip so the user knows to fix their config.
@@ -62,7 +88,7 @@ class NasPowerPlatform {
                     this.nasAccessories.set(uuid, wrapper);
                 }
                 else {
-                    this.log.info('Adding new accessory:', device.name);
+                    this.log.info(`Adding new accessory: ${device.name}`);
                     const accessory = new this.api.platformAccessory(device.name, uuid);
                     const wrapper = new accessory_1.NasAccessory(this, accessory, device);
                     this.nasAccessories.set(uuid, wrapper);

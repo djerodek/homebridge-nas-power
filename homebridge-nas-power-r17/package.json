@@ -1,6 +1,6 @@
 {
   "name": "homebridge-nas-power",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Homebridge plugin to control NAS power via Wake-on-LAN and SSH shutdown, with SSH host key verification.",
   "main": "dist/index.js",
   "license": "MIT",
