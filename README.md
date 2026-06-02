@@ -6,7 +6,7 @@ Homebridge plugin to expose your NAS as a switch in Apple HomeKit.
 - **OFF** → Connects via SSH and runs a shutdown command
 - **State** → Detected by polling SSH port connectivity (TOFU host key verification)
 
-Works with any Linux-based NAS that has SSH enabled (tested on OpenMediaVault, TrueNAS SCALE, Unraid, and standard Ubuntu/Debian servers).
+Works with any Linux-based NAS or macOS machine that has SSH enabled (tested on OpenMediaVault, TrueNAS SCALE, Unraid, standard Ubuntu/Debian servers, and macOS).
 
 ## Maintenance Status
 
@@ -18,9 +18,10 @@ This project is **unmaintained**. The original author has no plans to actively m
 
 - Homebridge ≥ 1.6.0
 - Node.js ≥ 18
-- SSH enabled on your NAS
+- SSH enabled on your target machine
 - The SSH user must have permission to run the shutdown command (see below)
-- WOL enabled in your NAS BIOS/UEFI and network switch (only required for power-on)
+- WOL enabled in your machine's BIOS/UEFI and network switch (only required for power-on)
+- **macOS targets:** Enable "Wake for network access" in System Settings → Energy
 
 ---
 
@@ -38,6 +39,8 @@ Or install via the Homebridge UI by searching `homebridge-nas-power`.
 
 The plugin runs `sudo shutdown -h now` over SSH by default. Allow this without a password prompt:
 
+### Linux / NAS
+
 1. Verify the path to `shutdown` on your system:
 
 ```bash
@@ -51,6 +54,22 @@ yourusername ALL=(ALL) NOPASSWD: /sbin/shutdown, /usr/sbin/shutdown
 ```
 
 > **Note:** On modern systemd-based systems, `sudo systemctl poweroff` is often more reliable. Set this via the `shutdownCommand` config option.
+
+### macOS
+
+macOS requires `sudo` to be configured for passwordless shutdown. Run:
+
+```bash
+sudo visudo
+```
+
+Add:
+
+```
+yourusername ALL=(ALL) NOPASSWD: /sbin/shutdown
+```
+
+The default `sudo shutdown -h now` command works on macOS without any changes to `shutdownCommand`.
 
 ---
 

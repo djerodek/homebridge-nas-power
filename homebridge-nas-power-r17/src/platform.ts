@@ -60,8 +60,27 @@ export class NasPowerPlatform implements DynamicPlatformPlugin {
       return typeof raw === 'string' ? raw : String(raw);
     };
 
+    // Validate first — filter out malformed devices before building the UUID set.
+    // Without this, safeUuidSource runs against undefined fields, producing ghost UUIDs
+    // like "undefinedundefined" that prevent stale accessory cleanup from working correctly.
+    const validDevices = devices.filter(device => {
+      if (!device.name || typeof device.name !== 'string') {
+        this.log.error(
+          `[Platform] Device missing a valid "name" (must be a string). Found: ${String(device.name)}. Skipping.`,
+        );
+        return false;
+      }
+      if (!device.host || typeof device.host !== 'string') {
+        this.log.error(
+          `[Platform] Device "${device.name}" missing a valid "host" (must be a string). Skipping.`,
+        );
+        return false;
+      }
+      return true;
+    });
+
     const configuredUuids = new Set(
-      devices
+      validDevices
         .map(d => safeUuidSource(d))
         .filter((s): s is string => s !== null)
         .map(s => this.api.hap.uuid.generate(s)),
@@ -74,22 +93,7 @@ export class NasPowerPlatform implements DynamicPlatformPlugin {
       this.unregisterPlatformAccessories(stale);
     }
 
-    for (const device of devices) {
-      // Validate required string fields before doing anything else —
-      // numeric or missing values cause uuid.generate() to receive NaN and crash.
-      if (!device.name || typeof device.name !== 'string') {
-        this.log.error(
-          `[Platform] Device missing a valid "name" (must be a string). Found: ${device.name}. Skipping.`,
-        );
-        continue;
-      }
-      if (!device.host || typeof device.host !== 'string') {
-        this.log.error(
-          `[Platform] Device "${device.name}" missing a valid "host" (must be a string). Skipping.`,
-        );
-        continue;
-      }
-
+    for (const device of validDevices) {
       // Build UUID source and coerce to string to handle any non-string config values
       const uuidSrc = safeUuidSource(device);
       if (uuidSrc === null) {
