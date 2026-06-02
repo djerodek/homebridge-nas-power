@@ -69,7 +69,10 @@ class NasAccessory {
         if (!this.mac) {
             this.log.warn('No MAC address configured. Power-on (WOL) will not be available.');
         }
-        if (config.password && config.privateKeyPath) {
+        // Runtime check — Homebridge loads config from raw JSON so TypeScript's discriminated
+        // union cannot enforce mutual exclusivity at runtime. Cast to loose type to check.
+        const looseConfig = config;
+        if (looseConfig['password'] && looseConfig['privateKeyPath']) {
             this.log.warn('Both password and privateKeyPath provided. Private key will be used.');
         }
         this.ssh = new ssh_1.SshManager({

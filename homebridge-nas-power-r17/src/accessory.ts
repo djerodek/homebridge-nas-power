@@ -111,7 +111,6 @@ export class NasAccessory {
     if (looseConfig['password'] && looseConfig['privateKeyPath']) {
       this.log.warn('Both password and privateKeyPath provided. Private key will be used.');
     }
-    }
 
     this.ssh = new SshManager({
       host: config.host,
