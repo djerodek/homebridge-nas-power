@@ -16,7 +16,8 @@
   "files": [
     "dist",
     "config.schema.json",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "rimraf dist && tsc",
