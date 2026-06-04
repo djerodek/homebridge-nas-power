@@ -41,7 +41,7 @@
               "type": "integer",
               "default": 22,
               "minimum": 1,
-              "maximum": 65535
+              "description": "SSH port on the target machine."
             },
             "username": {
               "title": "SSH Username",
@@ -78,24 +78,21 @@
               "type": "integer",
               "default": 30,
               "minimum": 5,
-              "maximum": 86400,
-              "description": "How often to check NAS power state via SSH port check. Min 5s, max 86400s (24h)."
+              "description": "How often to check power state via SSH port check. Minimum 5s."
             },
             "wolVerifyDelay": {
               "title": "WOL Verify Delay (seconds)",
               "type": "integer",
               "default": 10,
               "minimum": 1,
-              "maximum": 300,
-              "description": "How long to wait after sending WOL before checking if the NAS has booted. Increase for slow-booting hardware."
+              "description": "Duration in seconds of the boot verification window after WOL. The plugin retries every 5s within this window — increase for slow-booting hardware."
             },
             "shutdownCooldownDelay": {
               "title": "Shutdown Cooldown Delay (seconds)",
               "type": "integer",
-              "default": 15,
+              "default": 30,
               "minimum": 1,
-              "maximum": 300,
-              "description": "How long to suppress polling after a shutdown command. During this window, rapid power-on will not be detected until the cooldown expires. Default 15s covers most NAS shutdown speeds; increase for slower hardware."
+              "description": "Seconds to suppress polling after a shutdown command to prevent the switch flickering back to ON. Cancelled immediately if the user toggles the switch again."
             },
             "wolBroadcastAddress": {
               "title": "WOL Broadcast Address",
@@ -116,8 +113,7 @@
               "type": "integer",
               "default": 30,
               "minimum": 5,
-              "maximum": 300,
-              "description": "How long to wait for the SSH shutdown command to complete before treating it as a timeout. Increase for slow-shutting NAS hardware."
+              "description": "How long to wait for the SSH shutdown command to complete before treating it as a timeout. Increase for slow-shutting hardware."
             },
             "uuidOverride": {
               "title": "UUID Override",
