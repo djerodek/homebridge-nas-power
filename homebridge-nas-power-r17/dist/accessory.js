@@ -129,6 +129,7 @@ class NasAccessory {
     destroy() {
         this.destroyed = true;
         this.activeWolGeneration = null;
+        this.isPolling = false; // prevent silent no-op if accessory is re-registered immediately
         if (this.pollTimer !== null) {
             clearTimeout(this.pollTimer);
             this.pollTimer = null;
@@ -166,14 +167,12 @@ class NasAccessory {
     async handleSetInternal(value, generation) {
         if (this.destroyed)
             return;
-        // Reset failure counter — user action implies NAS is expected reachable.
-        // Without this, backoff from an offline period would delay post-WOL polling.
-        this.consecutiveFailures = 0;
+        // wolVerifyGeneration gates both WOL verification and shutdown serialisation —
+        // the name is WOL-specific but the counter must be incremented on ALL actions
+        // (including shutdown) to invalidate any in-flight verify callbacks.
         if (this.wolVerifyTimer !== null) {
             clearTimeout(this.wolVerifyTimer);
             this.wolVerifyTimer = null;
-            // Also clear the generation flag — if the user toggles OFF during a WOL verify
-            // window, activeWolGeneration would otherwise remain set and permanently block polling.
             this.activeWolGeneration = null;
         }
         if (this.shutdownCooldownTimer !== null) {
@@ -184,6 +183,9 @@ class NasAccessory {
         this.currentState = value;
         this.service.updateCharacteristic(this.platform.api.hap.Characteristic.On, value);
         if (value) {
+            // Reset failure counter here (not in revertState) — only relevant for WOL path.
+            // Resetting in revertState would wipe backoff on genuine shutdown failures too.
+            this.consecutiveFailures = 0;
             await this.handleWakeOnLan(generation);
         }
         else {
@@ -221,8 +223,10 @@ class NasAccessory {
         else {
             this.log.info(`WOL packets sent (${successCount}/3 succeeded). Will verify boot for up to ${this.wolVerifyDelay / 1000}s.`);
         }
-        const retryIntervalMs = WOL_VERIFY_RETRY_MS;
-        const deadlineMs = Date.now() + this.wolVerifyDelay;
+        // Use retry count instead of wall clock deadline — Date.now() is not monotonic
+        // and can jump backward on NTP slew or clock changes, causing premature expiry.
+        const maxRetries = Math.floor(this.wolVerifyDelay / WOL_VERIFY_RETRY_MS);
+        let retryCount = 0;
         const scheduleVerify = () => {
             if (this.destroyed || this.wolVerifyGeneration !== generation) {
                 if (this.activeWolGeneration === generation) {
@@ -230,8 +234,7 @@ class NasAccessory {
                 }
                 return;
             }
-            const remaining = deadlineMs - Date.now();
-            if (remaining <= 0) {
+            if (retryCount >= maxRetries) {
                 if (this.activeWolGeneration === generation) {
                     this.activeWolGeneration = null;
                 }
@@ -241,8 +244,9 @@ class NasAccessory {
                 this.wolVerifyTimer = null;
                 return;
             }
-            this.wolVerifyTimer = setTimeout(async () => {
+            const timer = setTimeout(async () => {
                 this.wolVerifyTimer = null;
+                retryCount++;
                 if (this.destroyed || this.wolVerifyGeneration !== generation) {
                     if (this.activeWolGeneration === generation) {
                         this.activeWolGeneration = null;
@@ -268,7 +272,7 @@ class NasAccessory {
                         }
                     }
                     else {
-                        this.log.info(`Post-WOL check: NAS still offline. Retrying in ${retryIntervalMs / 1000}s...`);
+                        this.log.info(`Post-WOL check: NAS still offline. Retrying in ${WOL_VERIFY_RETRY_MS / 1000}s... (${retryCount}/${maxRetries})`);
                         scheduleVerify();
                     }
                 }
@@ -282,7 +286,9 @@ class NasAccessory {
                     this.log.warn(`Post-WOL verify error: ${err.message}. Retrying...`);
                     scheduleVerify();
                 }
-            }, Math.min(retryIntervalMs, deadlineMs - Date.now()));
+            }, Math.max(0, WOL_VERIFY_RETRY_MS)); // Math.max guards against negative delay
+            timer.unref(); // allow clean process exit during long verify windows
+            this.wolVerifyTimer = timer;
         };
         scheduleVerify();
     }
@@ -293,9 +299,13 @@ class NasAccessory {
             // ambiguousOnTimeout=true: timeout during shutdown likely means NAS powered off
             // mid-execution rather than a genuine failure — treat as expected, not an error.
             await this.ssh.exec(this.shutdownCommand, true);
+            if (this.destroyed)
+                return; // Guard against destruction during async gap
             this.log.info(`Shutdown command sent.`);
         }
         catch (err) {
+            if (this.destroyed)
+                return;
             const e = err;
             const isExpectedDrop = e.code === 'ECONNRESET' || e.code === 'EPIPE' ||
                 e.code === 'ECONNABORTED' || e.code === 'ENOTCONN' ||
@@ -310,11 +320,15 @@ class NasAccessory {
                 return;
             }
         }
+        if (this.destroyed)
+            return;
         // Block polling for a configurable grace period to prevent the switch flickering
         // back to ON while the NAS is still in the process of powering down.
-        this.shutdownCooldownTimer = setTimeout(() => {
+        const timer = setTimeout(() => {
             this.shutdownCooldownTimer = null;
         }, this.shutdownCooldownDelay);
+        timer.unref();
+        this.shutdownCooldownTimer = timer;
     }
     // ── Polling ──────────────────────────────────────────────────────────────────
     async poll() {
@@ -362,12 +376,16 @@ class NasAccessory {
         }
     }
     schedulePoll() {
+        if (this.destroyed)
+            return;
         if (this.pollTimer !== null)
             clearTimeout(this.pollTimer);
         const interval = this.consecutiveFailures > 0
             ? Math.min(this.pollInterval * Math.pow(2, this.consecutiveFailures), MAX_BACKOFF_MS)
             : this.pollInterval;
-        this.pollTimer = setTimeout(() => this.poll(), interval);
+        const timer = setTimeout(() => this.poll(), interval);
+        timer.unref(); // allow process to exit cleanly if poll is pending
+        this.pollTimer = timer;
     }
     // ── Helpers ──────────────────────────────────────────────────────────────────
     revertState(state, reason) {

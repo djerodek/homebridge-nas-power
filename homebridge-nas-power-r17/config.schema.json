@@ -113,7 +113,7 @@
               "type": "integer",
               "default": 30,
               "minimum": 5,
-              "description": "How long to wait for the SSH shutdown command to complete before treating it as a timeout. Increase for slow-shutting hardware."
+              "description": "How long to wait for the SSH shutdown command to complete before treating it as a timeout. Default 30s matches the internal constant. Increase for slow-shutting hardware."
             },
             "uuidOverride": {
               "title": "UUID Override",

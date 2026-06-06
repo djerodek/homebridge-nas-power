@@ -96,6 +96,9 @@ class SshManager {
             if (fs.existsSync(this.knownHostsPath)) {
                 const data = fs.readFileSync(this.knownHostsPath, 'utf8').trim();
                 const lines = data.split('\n').filter(Boolean);
+                // Format: "host:port SHA256:base64fingerprint" — one entry per line.
+                // This is a private format specific to this plugin and is NOT interchangeable
+                // with a standard OpenSSH ~/.ssh/known_hosts file.
                 for (const line of lines) {
                     const [storedHost, fingerprint] = line.split(' ');
                     if (storedHost === `${this.host}:${this.port}`) {
@@ -153,7 +156,7 @@ class SshManager {
             this.log.error(`[SSH] HOST KEY MISMATCH for ${this.host}!\n` +
                 `  Expected: ${this.knownFingerprint}\n` +
                 `  Got:      ${fingerprint}\n` +
-                `  If expected (e.g. OMV reinstall), verify the new key with:\n` +
+                `  If expected (e.g. you reinstalled the OS), verify the new key with:\n` +
                 `    ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub\n` +
                 `  Then delete ${this.knownHostsPath} and restart Homebridge.`);
             return false;
@@ -215,8 +218,13 @@ class SshManager {
         const ssh = await this.connect();
         let timeoutId;
         try {
+            const execPromise = ssh.execCommand(command);
+            // Attach a no-op catch to execPromise — if the timeout wins the race and
+            // ssh.dispose() is called, the pending execCommand promise may reject after
+            // disposal. Without this, that rejection could surface as an unhandled warning.
+            execPromise.catch(() => { });
             const result = await Promise.race([
-                ssh.execCommand(command),
+                execPromise,
                 new Promise((_, reject) => {
                     timeoutId = setTimeout(() => {
                         reject(ambiguousOnTimeout
@@ -261,12 +269,14 @@ class SshManager {
                 if (err.code === 'ECONNREFUSED' ||
                     err.code === 'ETIMEDOUT' ||
                     err.code === 'EHOSTUNREACH' ||
-                    err.code === 'EHOSTDOWN') {
+                    err.code === 'EHOSTDOWN' ||
+                    err.code === 'ENETUNREACH') {
                     // Host unreachable or port closed — treat as offline, not a network error.
+                    // ENETUNREACH included: local network interface drop should not trigger backoff.
                     resolve(false);
                 }
                 else {
-                    // True network anomaly (e.g. ENETUNREACH, DNS failure) — trigger backoff
+                    // True network anomaly (e.g. DNS failure, EAI_AGAIN) — trigger backoff
                     reject(err);
                 }
             });

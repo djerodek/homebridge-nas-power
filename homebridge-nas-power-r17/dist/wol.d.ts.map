@@ -1,1 +1,1 @@
-{"version":3,"file":"wol.d.ts","sourceRoot":"","sources":["../src/wol.ts"],"names":[],"mappings":"AACA,OAAO,EAAE,UAAU,EAAE,MAAM,SAAS,CAAC;AAIrC;;;;;GAKG;AACH,wBAAgB,OAAO,CAAC,GAAG,EAAE,MAAM,EAAE,IAAI,GAAE,UAAe,GAAG,OAAO,CAAC,IAAI,CAAC,CAmFzE"}
+{"version":3,"file":"wol.d.ts","sourceRoot":"","sources":["../src/wol.ts"],"names":[],"mappings":"AACA,OAAO,EAAE,UAAU,EAAE,MAAM,SAAS,CAAC;AAIrC;;;;;GAKG;AACH,wBAAgB,OAAO,CAAC,GAAG,EAAE,MAAM,EAAE,IAAI,GAAE,UAAe,GAAG,OAAO,CAAC,IAAI,CAAC,CAuFzE"}

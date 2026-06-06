@@ -49,14 +49,20 @@ export function sendWol(mac: string, opts: WolOptions = {}): Promise<void> {
       }
     }
 
+    // settled flag prevents done() from being called twice — the timeout may
+    // fire and reject the promise while the bind callback is still pending,
+    // causing a second invocation of done() on an already-settled promise.
+    let settled = false;
+
     // Timeout guard — if the socket gets into a bad state the Promise would
     // never settle without this. Rare on LAN but plugins run for months/years.
     const sendTimeout = setTimeout(() => {
-      safeClose();
-      reject(new Error('WOL send timeout'));
+      done(new Error('WOL send timeout'));
     }, WOL_SEND_TIMEOUT_MS);
 
     function done(err?: Error | null): void {
+      if (settled) return;
+      settled = true;
       clearTimeout(sendTimeout);
       safeClose();
       if (err) {
@@ -67,9 +73,7 @@ export function sendWol(mac: string, opts: WolOptions = {}): Promise<void> {
     }
 
     socket.once('error', (err: Error) => {
-      clearTimeout(sendTimeout);
-      safeClose();
-      reject(err);
+      done(err);
     });
 
     // Wrap bind() in try/catch — on some platforms/states it can throw synchronously,
