@@ -4,6 +4,42 @@ All notable changes to homebridge-nas-power are documented here.
 
 ---
 
+## [0.1.7] - 2026-06-07
+
+### Added
+- `README.md` — Dedicated low-privilege SSH user setup documented as best practice; includes step-by-step instructions for creating a `homebridge` user restricted to running only the shutdown command via sudo
+
+### Fixed
+- `accessory.ts` — Added `isWolWindowActive()` helper method — replaces five scattered `activeWolGeneration` manual cleanup sites in `scheduleVerify` callbacks with a single derived check; stale callbacks are now automatically invalidated when `wolVerifyGeneration` increments
+- `accessory.ts` — `activeWolGeneration` explicitly set on WOL path and nulled on shutdown path in `handleSetInternal` for clarity
+- `platform.ts` — Auth field validation added to `discoverDevices()` — devices missing both `password` and `privateKeyPath` are now skipped with a clear error log at config-load time rather than failing inside the accessory constructor
+- `config.schema.json` — `uuidOverride` now enforces `minLength: 1` — empty string no longer silently produces a valid but unintended UUID
+- `ssh.ts` — `exec()` error now includes the command name and both stderr/stdout in the message for easier diagnosis
+- `ssh.ts` — `EHOSTDOWN` and `ENETUNREACH` in `isAlive()` now documented with comments explaining why they resolve false rather than reject
+- `CHANGELOG.md` — Added missing 0.1.6 entry
+
+---
+
+## [0.1.6] - 2026-06-04
+
+### Fixed
+- `accessory.ts` — `isPolling` now reset to false in `destroy()`, preventing silent no-op if accessory is immediately re-registered
+- `accessory.ts` — `consecutiveFailures` reset moved from `revertState` to WOL path only in `handleSetInternal` — prevents wiping backoff on genuine shutdown failures
+- `accessory.ts` — WOL verify deadline replaced with retry count — avoids `Date.now()` wall clock jump causing premature expiry on NTP slew
+- `accessory.ts` — WOL verify `setTimeout` now calls `.unref()` — allows clean process exit during long verify windows
+- `accessory.ts` — `Math.max(0, WOL_VERIFY_RETRY_MS)` guards against negative timer delay
+- `accessory.ts` — `retryIntervalMs` alias removed — `WOL_VERIFY_RETRY_MS` constant used directly
+- `accessory.ts` — `handleShutdown()` returns early if `destroyed` after SSH await — prevents cooldown timer being set after destruction
+- `accessory.ts` — `schedulePoll()` now checks `destroyed` at top — self-contained guard
+- `accessory.ts` — `pollTimer` and `shutdownCooldownTimer` call `.unref()` for clean process exit
+- `accessory.ts` — `revertState` no longer resets `consecutiveFailures`
+- `wol.ts` — `socket 'error'` handler routes through `done()` instead of calling `reject()` directly — respects `settled` flag
+- `ssh.ts` — `ENETUNREACH` added to `isAlive()` resolve-false list — local interface drops no longer trigger backoff
+- `ssh.ts` — Known hosts file format documented as plugin-specific, not standard OpenSSH format
+- `ssh.ts` — OMV-specific reference removed from fingerprint mismatch error message
+
+---
+
 ## [0.1.5] - 2026-06-04
 
 ### Added

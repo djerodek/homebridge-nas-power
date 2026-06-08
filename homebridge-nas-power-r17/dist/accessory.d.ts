@@ -34,6 +34,13 @@ export declare class NasAccessory {
     private handleShutdown;
     private poll;
     private schedulePoll;
+    /**
+     * Returns true when a WOL verification window is active for the current generation.
+     * Using this derived check instead of manual activeWolGeneration nullification in
+     * every callback means a new action (increment to wolVerifyGeneration) instantly
+     * invalidates all previous callbacks without requiring explicit cleanup in each one.
+     */
+    private isWolWindowActive;
     private revertState;
 }
 //# sourceMappingURL=accessory.d.ts.map

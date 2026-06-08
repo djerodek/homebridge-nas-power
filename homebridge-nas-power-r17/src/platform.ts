@@ -76,6 +76,15 @@ export class NasPowerPlatform implements DynamicPlatformPlugin {
         );
         return false;
       }
+      // Validate auth early so the error surfaces at config-load time rather than
+      // inside the accessory constructor where it is harder to diagnose.
+      const loose = device as Record<string, unknown>;
+      if (!loose['password'] && !loose['privateKeyPath']) {
+        this.log.error(
+          `[Platform] Device "${device.name}" requires either "password" or "privateKeyPath". Skipping.`,
+        );
+        return false;
+      }
       return true;
     });
 

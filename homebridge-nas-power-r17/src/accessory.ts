@@ -230,8 +230,14 @@ export class NasAccessory {
       // Reset failure counter here (not in revertState) — only relevant for WOL path.
       // Resetting in revertState would wipe backoff on genuine shutdown failures too.
       this.consecutiveFailures = 0;
+      // Mark this generation as the active WOL window — isWolWindowActive() will
+      // automatically return false when wolVerifyGeneration increments on next action,
+      // eliminating the need for manual cleanup in each callback.
+      this.activeWolGeneration = generation;
       await this.handleWakeOnLan(generation);
     } else {
+      // Ensure no WOL window is considered active during shutdown
+      this.activeWolGeneration = null;
       await this.handleShutdown();
     }
   }
@@ -275,12 +281,12 @@ export class NasAccessory {
     let retryCount = 0;
 
     const scheduleVerify = (): void => {
-      if (this.destroyed || this.wolVerifyGeneration !== generation) {
-        if (this.activeWolGeneration === generation) { this.activeWolGeneration = null; }
-        return;
-      }
+      // isWolWindowActive() returns false if wolVerifyGeneration incremented (new action),
+      // so no manual activeWolGeneration nullification is needed in each callback.
+      if (this.destroyed || !this.isWolWindowActive()) return;
+
       if (retryCount >= maxRetries) {
-        if (this.activeWolGeneration === generation) { this.activeWolGeneration = null; }
+        this.activeWolGeneration = null;
         this.log.warn('WOL verify deadline reached — NAS did not respond. Reporting OFF.');
         this.currentState = false;
         this.service.updateCharacteristic(this.platform.api.hap.Characteristic.On, false);
@@ -291,20 +297,14 @@ export class NasAccessory {
       const timer = setTimeout(async () => {
         this.wolVerifyTimer = null;
         retryCount++;
-        if (this.destroyed || this.wolVerifyGeneration !== generation) {
-          if (this.activeWolGeneration === generation) { this.activeWolGeneration = null; }
-          return;
-        }
+        if (this.destroyed || !this.isWolWindowActive()) return;
 
         try {
           const alive = await this.ssh.isAlive();
-          if (this.destroyed || this.wolVerifyGeneration !== generation) {
-            if (this.activeWolGeneration === generation) { this.activeWolGeneration = null; }
-            return;
-          }
+          if (this.destroyed || !this.isWolWindowActive()) return;
 
           if (alive) {
-            if (this.activeWolGeneration === generation) { this.activeWolGeneration = null; }
+            this.activeWolGeneration = null;
             this.log.info('Post-WOL check: NAS is UP');
             if (this.currentState !== true) {
               this.currentState = true;
@@ -315,14 +315,11 @@ export class NasAccessory {
             scheduleVerify();
           }
         } catch (err) {
-          if (this.destroyed || this.wolVerifyGeneration !== generation) {
-            if (this.activeWolGeneration === generation) { this.activeWolGeneration = null; }
-            return;
-          }
+          if (this.destroyed || !this.isWolWindowActive()) return;
           this.log.warn(`Post-WOL verify error: ${(err as Error).message}. Retrying...`);
           scheduleVerify();
         }
-      }, Math.max(0, WOL_VERIFY_RETRY_MS)); // Math.max guards against negative delay
+      }, Math.max(0, WOL_VERIFY_RETRY_MS)); // Math.max guards future-proofing if constant ever changes
       timer.unref(); // allow clean process exit during long verify windows
       this.wolVerifyTimer = timer;
     };
@@ -376,7 +373,7 @@ export class NasAccessory {
 
     // Skip while WOL verification or shutdown cooldown is active to prevent
     // poll results from flickering the switch during power transitions.
-    if (this.activeWolGeneration !== null || this.shutdownCooldownTimer !== null) {
+    if (this.isWolWindowActive() || this.shutdownCooldownTimer !== null) {
       this.schedulePoll();
       return;
     }
@@ -429,6 +426,17 @@ export class NasAccessory {
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Returns true when a WOL verification window is active for the current generation.
+   * Using this derived check instead of manual activeWolGeneration nullification in
+   * every callback means a new action (increment to wolVerifyGeneration) instantly
+   * invalidates all previous callbacks without requiring explicit cleanup in each one.
+   */
+  private isWolWindowActive(): boolean {
+    return this.activeWolGeneration !== null &&
+      this.activeWolGeneration === this.wolVerifyGeneration;
+  }
 
   private revertState(state: boolean, reason?: string): void {
     if (!this.destroyed) {

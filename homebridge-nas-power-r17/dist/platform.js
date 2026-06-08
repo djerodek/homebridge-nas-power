@@ -56,6 +56,13 @@ class NasPowerPlatform {
                 this.log.error(`[Platform] Device "${device.name}" missing a valid "host" (must be a string). Skipping.`);
                 return false;
             }
+            // Validate auth early so the error surfaces at config-load time rather than
+            // inside the accessory constructor where it is harder to diagnose.
+            const loose = device;
+            if (!loose['password'] && !loose['privateKeyPath']) {
+                this.log.error(`[Platform] Device "${device.name}" requires either "password" or "privateKeyPath". Skipping.`);
+                return false;
+            }
             return true;
         });
         const configuredUuids = new Set(validDevices

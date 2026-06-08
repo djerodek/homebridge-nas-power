@@ -234,7 +234,8 @@ class SshManager {
                 }),
             ]);
             if (result.code !== 0 && result.code !== null) {
-                throw new Error(`Command exited with code ${result.code}: ${result.stderr || '(no stderr)'}`);
+                const detail = [result.stderr, result.stdout].filter(Boolean).join(' | ') || '(no output)';
+                throw new Error(`Command "${command}" exited with code ${result.code}: ${detail}`);
             }
             return result;
         }
@@ -269,10 +270,10 @@ class SshManager {
                 if (err.code === 'ECONNREFUSED' ||
                     err.code === 'ETIMEDOUT' ||
                     err.code === 'EHOSTUNREACH' ||
-                    err.code === 'EHOSTDOWN' ||
-                    err.code === 'ENETUNREACH') {
-                    // Host unreachable or port closed — treat as offline, not a network error.
-                    // ENETUNREACH included: local network interface drop should not trigger backoff.
+                    err.code === 'EHOSTDOWN' || // ARP failure — host known to be down, treat as offline not error
+                    err.code === 'ENETUNREACH' // local interface drop — resolving false avoids triggering backoff
+                // when the RPi's own network is momentarily unavailable
+                ) {
                     resolve(false);
                 }
                 else {

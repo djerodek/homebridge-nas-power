@@ -118,7 +118,8 @@
             "uuidOverride": {
               "title": "UUID Override",
               "type": "string",
-              "description": "Advanced: manually specify the seed string for this device's HomeKit UUID. Use when two physical devices share the same MAC address and need to coexist in the same config."
+              "minLength": 1,
+              "description": "Advanced: manually specify the seed string for this device's HomeKit UUID. Use when you need a stable UUID independent of MAC address or name/host — for example, to rename a device without losing HomeKit history."
             },
             "manufacturer": {
               "title": "Manufacturer",

@@ -39,7 +39,68 @@ Or install via the Homebridge UI by searching `homebridge-nas-power`.
 
 The plugin runs `sudo shutdown -h now` over SSH by default. Allow this without a password prompt:
 
-### Linux / NAS
+### Best Practice — Dedicated Low-Privilege User
+
+Rather than granting sudo shutdown access to your main admin account, create a dedicated user that can **only** run the shutdown command and nothing else. This limits exposure if the credentials are ever compromised.
+
+**Create the user:**
+
+```bash
+sudo adduser homebridge
+```
+
+Set a password when prompted.
+
+**Allow only the shutdown command via sudo:**
+
+```bash
+sudo nano /etc/sudoers.d/homebridge
+```
+
+Add this single line:
+
+```
+homebridge ALL=(ALL) NOPASSWD: /sbin/shutdown
+```
+
+Save with `Ctrl+O`, Enter, exit with `Ctrl+X`. Then lock down the file permissions:
+
+```bash
+sudo chmod 440 /etc/sudoers.d/homebridge
+```
+
+**Verify it works:**
+
+```bash
+su - homebridge
+sudo /sbin/shutdown --help
+```
+
+Should show help without asking for a password. Then:
+
+```bash
+exit
+```
+
+**Restart SSH:**
+
+```bash
+sudo systemctl restart ssh
+```
+
+**Update your Homebridge config to use the full path and dedicated user:**
+
+```json
+"username": "homebridge",
+"password": "yourpassword",
+"shutdownCommand": "sudo /sbin/shutdown -h now"
+```
+
+> **Note:** The `homebridge` user has no sudo access to any other command — even if the credentials are obtained, an attacker can only shut down the machine, not gain elevated access.
+
+### Linux / NAS (existing admin user)
+
+If you prefer to use your existing admin account, allow passwordless shutdown:
 
 1. Verify the path to `shutdown` on your system:
 
@@ -47,7 +108,7 @@ The plugin runs `sudo shutdown -h now` over SSH by default. Allow this without a
 which shutdown
 ```
 
-2. Run `visudo` and add (substituting the correct path if different):
+2. Run `visudo` and add:
 
 ```
 yourusername ALL=(ALL) NOPASSWD: /sbin/shutdown, /usr/sbin/shutdown
