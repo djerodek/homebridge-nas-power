@@ -73,6 +73,16 @@ export class SshManager {
 
   // ── Known hosts ─────────────────────────────────────────────────────────────
 
+  /**
+   * Returns the key used to identify this host in the known hosts file.
+   * IPv6 addresses contain colons so we wrap them in brackets to avoid
+   * ambiguity when splitting lines: "[::1]:22 SHA256:..."
+   */
+  private getHostKeyIdentifier(): string {
+    const normalized = this.host.includes(':') ? `[${this.host}]` : this.host;
+    return `${normalized}:${this.port}`;
+  }
+
   private loadKnownFingerprint(): void {
     try {
       if (fs.existsSync(this.knownHostsPath)) {
@@ -81,9 +91,11 @@ export class SshManager {
         // Format: "host:port SHA256:base64fingerprint" — one entry per line.
         // This is a private format specific to this plugin and is NOT interchangeable
         // with a standard OpenSSH ~/.ssh/known_hosts file.
+        // IPv6 hosts are stored as [host]:port to avoid colon ambiguity.
+        const identifier = this.getHostKeyIdentifier();
         for (const line of lines) {
           const [storedHost, fingerprint] = line.split(' ');
-          if (storedHost === `${this.host}:${this.port}`) {
+          if (storedHost === identifier) {
             this.knownFingerprint = fingerprint ?? null;
             this.log.info(`[SSH] Loaded known fingerprint for ${this.host}`);
             return;
@@ -102,6 +114,7 @@ export class SshManager {
     // the next connection.
     const storedValue = `SHA256:${fingerprint}`;
     this.knownFingerprint = storedValue;
+    const identifier = this.getHostKeyIdentifier();
     try {
       const dir = path.dirname(this.knownHostsPath);
       fs.mkdirSync(dir, { recursive: true });
@@ -111,8 +124,8 @@ export class SshManager {
         lines = fs.readFileSync(this.knownHostsPath, 'utf8').trim().split('\n').filter(Boolean);
       }
 
-      lines = lines.filter(l => !l.startsWith(`${this.host}:${this.port} `));
-      lines.push(`${this.host}:${this.port} ${storedValue}`);
+      lines = lines.filter(l => !l.startsWith(`${identifier} `));
+      lines.push(`${identifier} ${storedValue}`);
 
       // 0o600: owner read/write only — good hygiene for a trust store file
       fs.writeFileSync(this.knownHostsPath, lines.join('\n') + '\n', {
@@ -150,7 +163,7 @@ export class SshManager {
         `  Expected: ${this.knownFingerprint}\n` +
         `  Got:      ${fingerprint}\n` +
         `  If expected (e.g. you reinstalled the OS), verify the new key with:\n` +
-        `    ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub\n` +
+        `    ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub\n` +
         `  Then delete ${this.knownHostsPath} and restart Homebridge.`,
       );
       return false;

@@ -32,8 +32,8 @@
             "mac": {
               "title": "MAC Address (for WOL)",
               "type": "string",
-              "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$",
-              "description": "MAC address used for Wake-on-LAN. Optional — if omitted, power-on will not be available.",
+              "pattern": "^([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}$",
+              "description": "MAC address used for Wake-on-LAN. Accepts colon, hyphen, or continuous hex formats (e.g. AA:BB:CC:DD:EE:FF, AA-BB-CC-DD-EE-FF). Optional — if omitted, power-on will not be available.",
               "placeholder": "AA:BB:CC:DD:EE:FF"
             },
             "port": {

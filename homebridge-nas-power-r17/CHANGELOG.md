@@ -4,6 +4,18 @@ All notable changes to homebridge-nas-power are documented here.
 
 ---
 
+## [0.1.9] - 2026-06-09
+
+### Fixed
+- `ssh.ts` — `getHostKeyIdentifier()` helper added — IPv6 addresses now stored as `[host]:port` in known hosts file, preventing colon-collision parsing failures
+- `ssh.ts` — SSH key mismatch error now uses wildcard `ssh_host_*_key.pub` path hint, covering RSA, ECDSA, and Ed25519 key types
+- `config.schema.json` — MAC address pattern relaxed to accept hyphens and un-delimited hex formats (AA-BB-CC-DD-EE-FF, AABBCCDDEEFF)
+- `accessory.ts` — `wolVerifyDelay` runtime guard raised from `>= 1` to `>= 5` to match schema minimum
+- `accessory.ts` — `stateQueue` reset to `Promise.resolve()` in `destroy()` — prevents dangling chain executing no-op tasks after shutdown
+- `package.json` — Added `"changelog"` field so Homebridge UI displays the changelog in the plugin summary
+
+---
+
 ## [0.1.8] - 2026-06-08
 
 ### Fixed

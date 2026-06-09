@@ -55,7 +55,7 @@ class NasAccessory {
         this.shutdownCommand = config.shutdownCommand ?? 'sudo shutdown -h now';
         this.wolBroadcastAddress = config.wolBroadcastAddress ?? '255.255.255.255';
         const rawVerifyDelay = Number(config.wolVerifyDelay);
-        this.wolVerifyDelay = Number.isFinite(rawVerifyDelay) && rawVerifyDelay >= 1
+        this.wolVerifyDelay = Number.isFinite(rawVerifyDelay) && rawVerifyDelay >= 5
             ? rawVerifyDelay * 1000
             : 10000;
         const rawCooldown = Number(config.shutdownCooldownDelay);
@@ -131,7 +131,9 @@ class NasAccessory {
     destroy() {
         this.destroyed = true;
         this.activeWolGeneration = null;
-        this.isPolling = false; // prevent silent no-op if accessory is re-registered immediately
+        this.isPolling = false;
+        // Reset the queue so any pending tasks after destruction are discarded cleanly
+        this.stateQueue = Promise.resolve();
         if (this.pollTimer !== null) {
             clearTimeout(this.pollTimer);
             this.pollTimer = null;

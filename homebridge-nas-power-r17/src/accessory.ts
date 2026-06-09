@@ -89,7 +89,7 @@ export class NasAccessory {
     this.wolBroadcastAddress = config.wolBroadcastAddress ?? '255.255.255.255';
 
     const rawVerifyDelay = Number(config.wolVerifyDelay);
-    this.wolVerifyDelay = Number.isFinite(rawVerifyDelay) && rawVerifyDelay >= 1
+    this.wolVerifyDelay = Number.isFinite(rawVerifyDelay) && rawVerifyDelay >= 5
       ? rawVerifyDelay * 1000
       : 10_000;
 
@@ -179,7 +179,9 @@ export class NasAccessory {
   destroy(): void {
     this.destroyed = true;
     this.activeWolGeneration = null;
-    this.isPolling = false; // prevent silent no-op if accessory is re-registered immediately
+    this.isPolling = false;
+    // Reset the queue so any pending tasks after destruction are discarded cleanly
+    this.stateQueue = Promise.resolve();
     if (this.pollTimer !== null) { clearTimeout(this.pollTimer); this.pollTimer = null; }
     if (this.wolVerifyTimer !== null) { clearTimeout(this.wolVerifyTimer); this.wolVerifyTimer = null; }
     if (this.shutdownCooldownTimer !== null) { clearTimeout(this.shutdownCooldownTimer); this.shutdownCooldownTimer = null; }

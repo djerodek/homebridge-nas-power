@@ -17,6 +17,12 @@ export declare class SshManager {
     private readonly execTimeoutMs;
     private knownFingerprint;
     constructor(opts: SshManagerOptions);
+    /**
+     * Returns the key used to identify this host in the known hosts file.
+     * IPv6 addresses contain colons so we wrap them in brackets to avoid
+     * ambiguity when splitting lines: "[::1]:22 SHA256:..."
+     */
+    private getHostKeyIdentifier;
     private loadKnownFingerprint;
     private saveFingerprint;
     private fingerprintVerifier;
