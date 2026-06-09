@@ -4,6 +4,24 @@ All notable changes to homebridge-nas-power are documented here.
 
 ---
 
+## [0.1.8] - 2026-06-08
+
+### Fixed
+- `accessory.ts` — `maxRetries` now uses `Math.max(1, ...)` guard — `wolVerifyDelay` values below 5s no longer cause immediate OFF report without a single connectivity check
+- `accessory.ts` — `activeWolGeneration` now explicitly cleared on no-MAC early return in `handleWakeOnLan` — previously polling was suppressed until next user toggle
+- `accessory.ts` — Redundant `activeWolGeneration` assignment removed from `handleWakeOnLan` — `handleSetInternal` already sets it before calling
+- `accessory.ts` — Post-async poll guard now uses `isWolWindowActive()` for consistency with pre-poll guard
+- `accessory.ts` — `handleShutdown` now accepts `generation` parameter and checks it before setting cooldown timer — prevents suppressing polling during an active WOL window when a queued shutdown completes after a subsequent WOL
+- `accessory.ts` — `err instanceof Error` check replaces `(err as Error).message ?? String(err)` in queue catch handler — the `??` branch was unreachable
+- `accessory.ts` — `delay()` helper now calls `.unref()` on its timer for consistency with other timers
+- `accessory.ts` — Device-prefixed logger now passed to `SshManager` — SSH log entries correctly attributed to device in multi-device setups
+- `platform.ts` — Accessory `displayName` synced when config `name` changes — no longer requires cache wipe to reflect rename
+- `config.schema.json` — `wolVerifyDelay` minimum raised from 1s to 5s — matches retry interval, ensures at least one verification fires
+- `README.md` — IPv6 addresses documented as unsupported for `host` field due to known hosts file format collision
+- `README.md` — `wolVerifyDelay` table entry notes minimum 5s
+
+---
+
 ## [0.1.7] - 2026-06-07
 
 ### Added

@@ -84,8 +84,8 @@
               "title": "WOL Verify Delay (seconds)",
               "type": "integer",
               "default": 10,
-              "minimum": 1,
-              "description": "Duration in seconds of the boot verification window after WOL. The plugin retries every 5s within this window — increase for slow-booting hardware."
+              "minimum": 5,
+              "description": "Duration in seconds of the boot verification window after WOL. The plugin retries every 5s within this window — minimum 5s ensures at least one check fires. Increase for slow-booting hardware."
             },
             "shutdownCooldownDelay": {
               "title": "Shutdown Cooldown Delay (seconds)",

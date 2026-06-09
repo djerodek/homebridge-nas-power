@@ -127,7 +127,14 @@ export class NasPowerPlatform implements DynamicPlatformPlugin {
       const existingAccessory = this.cachedAccessories.find(a => a.UUID === uuid);
       try {
         if (existingAccessory) {
-          this.log.info(`Restoring existing accessory: ${existingAccessory.displayName}`);
+          // Sync displayName if the user renamed the device in config
+          if (existingAccessory.displayName !== device.name) {
+            this.log.info(`Updating accessory name from "${existingAccessory.displayName}" to "${device.name}"`);
+            existingAccessory.displayName = device.name;
+            this.api.updatePlatformAccessories([existingAccessory]);
+          } else {
+            this.log.info(`Restoring existing accessory: ${existingAccessory.displayName}`);
+          }
           const wrapper = new NasAccessory(this, existingAccessory, device);
           this.nasAccessories.set(uuid, wrapper);
         } else {

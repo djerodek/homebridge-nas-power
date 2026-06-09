@@ -84,7 +84,9 @@ class NasAccessory {
             ...(config.passphrase !== undefined && { passphrase: config.passphrase }),
             ...(config.knownHostsPath !== undefined && { knownHostsPath: config.knownHostsPath }),
             ...(config.execTimeout !== undefined && { execTimeout: config.execTimeout }),
-            log: platformLog,
+            // Pass the device-prefixed logger so SSH log entries are attributed to the
+            // correct device in multi-device setups rather than the global platform log.
+            log: this.log,
         });
         // Accessory information
         const infoService = accessory.getService(hap.Service.AccessoryInformation);
@@ -160,7 +162,7 @@ class NasAccessory {
         }).catch((err) => {
             // Safety net — errors should be logged inside handleSetInternal before reaching here,
             // but log at this level too so nothing is silently swallowed if a future code path throws early.
-            this.log.error(`Unhandled error in state queue: ${err.message ?? String(err)}`);
+            this.log.error(`Unhandled error in state queue: ${err instanceof Error ? err.message : String(err)}`);
         });
         return Promise.resolve();
     }
@@ -195,21 +197,21 @@ class NasAccessory {
         else {
             // Ensure no WOL window is considered active during shutdown
             this.activeWolGeneration = null;
-            await this.handleShutdown();
+            await this.handleShutdown(generation);
         }
     }
     // ── WOL ─────────────────────────────────────────────────────────────────────
     async handleWakeOnLan(generation) {
         if (!this.mac) {
             this.log.warn('No MAC address configured for WOL.');
+            // Clear the WOL window set by handleSetInternal — without this, polling
+            // would be suppressed until the user next toggles the switch.
+            this.activeWolGeneration = null;
             this.revertState(false, 'No MAC address — reverting to OFF');
             return;
         }
-        // Set active flag BEFORE sending packets so any poll timer that fires during
-        // the async send sees the window as active and skips — prevents poll/WOL race
-        // where the switch flickers OFF mid-send. Using a boolean flag rather than a
-        // timer placeholder makes the intent explicit and avoids a stuck-timer edge case.
-        this.activeWolGeneration = generation;
+        // activeWolGeneration is already set to generation by handleSetInternal
+        // before calling this method — no need to set it again here.
         this.log.info(`Sending WOL magic packet to ${this.mac}`);
         let successCount = 0;
         for (let i = 0; i < 3; i++) {
@@ -231,7 +233,9 @@ class NasAccessory {
         }
         // Use retry count instead of wall clock deadline — Date.now() is not monotonic
         // and can jump backward on NTP slew or clock changes, causing premature expiry.
-        const maxRetries = Math.floor(this.wolVerifyDelay / WOL_VERIFY_RETRY_MS);
+        // Math.max(1,...) ensures at least one verification attempt even if wolVerifyDelay
+        // is set below WOL_VERIFY_RETRY_MS (e.g. 1-4s), preventing immediate OFF report.
+        const maxRetries = Math.max(1, Math.floor(this.wolVerifyDelay / WOL_VERIFY_RETRY_MS));
         let retryCount = 0;
         const scheduleVerify = () => {
             // isWolWindowActive() returns false if wolVerifyGeneration incremented (new action),
@@ -281,14 +285,12 @@ class NasAccessory {
         scheduleVerify();
     }
     // ── Shutdown ─────────────────────────────────────────────────────────────────
-    async handleShutdown() {
+    async handleShutdown(generation) {
         this.log.info(`Sending shutdown via SSH`);
         try {
-            // ambiguousOnTimeout=true: timeout during shutdown likely means NAS powered off
-            // mid-execution rather than a genuine failure — treat as expected, not an error.
             await this.ssh.exec(this.shutdownCommand, true);
             if (this.destroyed)
-                return; // Guard against destruction during async gap
+                return;
             this.log.info(`Shutdown command sent.`);
         }
         catch (err) {
@@ -310,8 +312,11 @@ class NasAccessory {
         }
         if (this.destroyed)
             return;
-        // Block polling for a configurable grace period to prevent the switch flickering
-        // back to ON while the NAS is still in the process of powering down.
+        // Guard against a queued WOL action that started while this SSH exec was in-flight.
+        // If wolVerifyGeneration has advanced, a new action is already running — setting
+        // the cooldown timer here would suppress polling during the active WOL window.
+        if (this.wolVerifyGeneration !== generation)
+            return;
         const timer = setTimeout(() => {
             this.shutdownCooldownTimer = null;
         }, this.shutdownCooldownDelay);
@@ -333,9 +338,9 @@ class NasAccessory {
             const alive = await this.ssh.isAlive();
             this.consecutiveFailures = 0;
             // Re-check guards after the async gap — a user may have toggled the switch
-            // while we were waiting for the TCP probe. If a transition is now active,
-            // discard this result to prevent the poll from flickering the switch.
-            if (this.destroyed || this.activeWolGeneration !== null || this.shutdownCooldownTimer !== null) {
+            // while we were waiting for the TCP probe. Uses isWolWindowActive() for
+            // consistency with the pre-poll guard above.
+            if (this.destroyed || this.isWolWindowActive() || this.shutdownCooldownTimer !== null) {
                 return;
             }
             if (alive !== this.currentState) {
@@ -396,6 +401,9 @@ class NasAccessory {
 }
 exports.NasAccessory = NasAccessory;
 function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise(resolve => {
+        const t = setTimeout(resolve, ms);
+        t.unref(); // allow process to exit cleanly during WOL inter-packet delays
+    });
 }
 //# sourceMappingURL=accessory.js.map

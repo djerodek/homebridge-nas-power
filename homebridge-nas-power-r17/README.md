@@ -234,7 +234,7 @@ The `shutdownCommand` config value is executed directly on the NAS over SSH with
 | `passphrase` | No | — | Passphrase for an encrypted private key. Only meaningful when `privateKeyPath` is set |
 | `shutdownCommand` | No | `sudo shutdown -h now` | Command to run over SSH to shut down the NAS |
 | `pollInterval` | No | `30` | Seconds between state polls (min 5) |
-| `wolVerifyDelay` | No | `10` | Duration in seconds of the boot verification window after WOL. The plugin retries every 5s within this window — increase for slow-booting hardware |
+| `wolVerifyDelay` | No | `10` | Duration in seconds of the boot verification window after WOL. The plugin retries every 5s within this window — minimum 5s. Increase for slow-booting hardware |
 | `shutdownCooldownDelay` | No | `30` | Seconds to suppress polling after a shutdown command to prevent the switch flickering back to ON. Cancelled immediately if the user toggles the switch again |
 | `execTimeout` | No | `30` | Seconds to wait for the SSH shutdown command before timing out. Increase for slow-shutting hardware |
 | `wolBroadcastAddress` | No | `255.255.255.255` | WOL broadcast address. Change for VLAN setups. IPv4 only — WOL does not support IPv6 |
@@ -266,6 +266,8 @@ For example:
 ```
 
 You can pre-populate this file manually for scripted deployments, or delete individual lines to force re-verification of a specific host.
+
+> **IPv6 note:** The plugin uses `host:port` as the key in the known hosts file. IPv6 addresses contain multiple colons and will break this parsing. IPv6 target addresses are not supported — always use IPv4 addresses for the `host` field.
 
 If the fingerprint changes legitimately (e.g. after reinstalling your NAS OS), verify the new key first:
 
