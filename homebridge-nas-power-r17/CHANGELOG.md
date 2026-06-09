@@ -4,6 +4,13 @@ All notable changes to homebridge-nas-power are documented here.
 
 ---
 
+## [0.1.10] - 2026-06-09
+
+### Changed
+- Version bump for npm publish — no code changes from 0.1.9
+
+---
+
 ## [0.1.9] - 2026-06-09
 
 ### Fixed
@@ -12,7 +19,8 @@ All notable changes to homebridge-nas-power are documented here.
 - `config.schema.json` — MAC address pattern relaxed to accept hyphens and un-delimited hex formats (AA-BB-CC-DD-EE-FF, AABBCCDDEEFF)
 - `accessory.ts` — `wolVerifyDelay` runtime guard raised from `>= 1` to `>= 5` to match schema minimum
 - `accessory.ts` — `stateQueue` reset to `Promise.resolve()` in `destroy()` — prevents dangling chain executing no-op tasks after shutdown
-- `package.json` — Added `"changelog"` field so Homebridge UI displays the changelog in the plugin summary
+- `package.json` — `"changelog"` field updated to raw GitHub URL so Homebridge UI can retrieve and display release notes
+- `README.md` — Known hosts format section updated to document bracket notation for IPv6; key verification command updated to wildcard path
 
 ---
 
