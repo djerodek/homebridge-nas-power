@@ -33,7 +33,7 @@
               "title": "MAC Address (for WOL)",
               "type": "string",
               "pattern": "^([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}$",
-              "description": "MAC address used for Wake-on-LAN. Accepts colon, hyphen, or continuous hex formats (e.g. AA:BB:CC:DD:EE:FF, AA-BB-CC-DD-EE-FF). Optional — if omitted, power-on will not be available.",
+              "description": "MAC address used for Wake-on-LAN. Accepts colon, hyphen, or continuous hex formats (e.g. AA:BB:CC:DD:EE:FF, AA-BB-CC-DD-EE-FF). Mixed delimiters are technically accepted but not recommended. Optional — if omitted, power-on will not be available.",
               "placeholder": "AA:BB:CC:DD:EE:FF"
             },
             "port": {
@@ -99,7 +99,7 @@
               "type": "string",
               "default": "255.255.255.255",
               "pattern": "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$",
-              "description": "Broadcast address for WOL magic packet. Change if your NAS is on a different VLAN or subnet.",
+              "description": "Broadcast address for WOL magic packet. Must be a broadcast address (e.g. 255.255.255.255 or 192.168.1.255) — do not enter a device IP address. Change for VLAN setups. IPv4 only.",
               "placeholder": "255.255.255.255"
             },
             "knownHostsPath": {

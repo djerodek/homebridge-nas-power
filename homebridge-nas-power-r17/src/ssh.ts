@@ -79,7 +79,10 @@ export class SshManager {
    * ambiguity when splitting lines: "[::1]:22 SHA256:..."
    */
   private getHostKeyIdentifier(): string {
-    const normalized = this.host.includes(':') ? `[${this.host}]` : this.host;
+    // Strip any existing brackets first — a user might supply [::1] directly,
+    // which would otherwise produce [[::1]]:22.
+    const stripped = this.host.replace(/^\[|\]$/g, '');
+    const normalized = stripped.includes(':') ? `[${stripped}]` : stripped;
     return `${normalized}:${this.port}`;
   }
 
@@ -94,7 +97,7 @@ export class SshManager {
         // IPv6 hosts are stored as [host]:port to avoid colon ambiguity.
         const identifier = this.getHostKeyIdentifier();
         for (const line of lines) {
-          const [storedHost, fingerprint] = line.split(' ');
+          const [storedHost, fingerprint] = line.split(' ', 2);
           if (storedHost === identifier) {
             this.knownFingerprint = fingerprint ?? null;
             this.log.info(`[SSH] Loaded known fingerprint for ${this.host}`);

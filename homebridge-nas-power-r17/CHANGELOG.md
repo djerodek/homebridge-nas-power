@@ -4,6 +4,53 @@ All notable changes to homebridge-nas-power are documented here.
 
 ---
 
+## [0.1.11] - 2026-06-21
+
+### Fixed
+- `package.json` — `changelog` URL updated to `latest` branch so Homebridge UI can retrieve and display release notes correctly
+- `platform.ts` — Accessory rename no longer mutates `displayName` directly (unreliable across Homebridge versions); stores name in `context.configName` and calls `updatePlatformAccessories()` — prevents silent cache desynchronisation on restart
+- `accessory.ts` — `stateQueue` reset comment corrected — clarifies that pending tasks still execute as no-ops rather than being cancelled
+- `accessory.ts` — Stale generation check added after WOL send loop before `scheduleVerify()` — consistent with guard pattern used elsewhere
+- `accessory.ts` — `wolVerifyDelay` runtime guard raised from `>= 1` to `>= 5` to match schema minimum of 5s
+- `accessory.ts` — `stateQueue` reset to `Promise.resolve()` in `destroy()` — allows chain to be GC'd after pending tasks complete
+- `accessory.ts` — WOL log messages now distinguish between a socket/network send error and the expected absence of UDP acknowledgement
+- `ssh.ts` — `getHostKeyIdentifier()` helper added — IPv6 addresses stored as `[host]:port` in known hosts file, preventing colon-collision parsing failures; strips existing brackets to prevent `[[::1]]:22` double-wrapping
+- `ssh.ts` — SSH key mismatch error now uses wildcard `ssh_host_*_key.pub` covering RSA, ECDSA, and Ed25519 key types
+- `ssh.ts` — `split(' ', 2)` in `loadKnownFingerprint` makes two-field intent explicit and handles extra whitespace in manually edited files
+- `config.schema.json` — MAC address pattern relaxed to accept hyphens and un-delimited hex formats; description notes mixed delimiters are accepted but not recommended
+- `config.schema.json` — `wolVerifyDelay` minimum raised from 1s to 5s — ensures at least one verification check fires
+- `config.schema.json` — `wolBroadcastAddress` description now explicitly warns against entering a unicast device IP — must be a broadcast address ending in `.255`
+- `README.md` — Known hosts format updated to document bracket notation for IPv6 and wildcard key verification command
+- `README.md` — `wolVerifyDelay` table entry notes minimum 5s
+
+---
+
+## [0.1.10] - 2026-06-09
+
+### Changed
+- Version bump for npm publish — no code changes from 0.1.9
+
+---
+
+## [0.1.9] - 2026-06-09
+
+### Fixed
+- `package.json` — `changelog` URL updated to `latest` branch so Homebridge UI can retrieve and display release notes correctly
+- `platform.ts` — Accessory rename no longer mutates `displayName` directly (unreliable across Homebridge versions); stores name in `context.configName` and calls `updatePlatformAccessories()` — prevents silent cache desynchronisation on restart
+- `accessory.ts` — `stateQueue` reset comment corrected — clarifies that pending tasks still execute as no-ops rather than being cancelled
+- `accessory.ts` — Stale generation check added after WOL send loop before `scheduleVerify()` — consistent with guard pattern used elsewhere
+- `accessory.ts` — `wolVerifyDelay` runtime guard raised from `>= 1` to `>= 5` to match schema minimum of 5s
+- `accessory.ts` — `stateQueue` reset to `Promise.resolve()` in `destroy()` — allows chain to be GC'd after pending tasks complete
+- `ssh.ts` — `getHostKeyIdentifier()` helper added — IPv6 addresses stored as `[host]:port` in known hosts file, preventing colon-collision parsing failures; strips existing brackets to prevent `[[::1]]:22` double-wrapping
+- `ssh.ts` — SSH key mismatch error now uses wildcard `ssh_host_*_key.pub` covering RSA, ECDSA, and Ed25519 key types
+- `ssh.ts` — `split(' ', 2)` in `loadKnownFingerprint` makes two-field intent explicit and handles extra whitespace in manually edited files
+- `config.schema.json` — MAC address pattern relaxed to accept hyphens and un-delimited hex formats; description notes mixed delimiters are accepted but not recommended
+- `config.schema.json` — `wolVerifyDelay` minimum raised from 1s to 5s to match retry interval — ensures at least one verification check fires
+- `README.md` — Known hosts format updated to document bracket notation for IPv6 and wildcard key verification command
+- `README.md` — `wolVerifyDelay` table entry notes minimum 5s
+
+---
+
 ## [0.1.10] - 2026-06-09
 
 ### Changed

@@ -132,7 +132,9 @@ class NasAccessory {
         this.destroyed = true;
         this.activeWolGeneration = null;
         this.isPolling = false;
-        // Reset the queue so any pending tasks after destruction are discarded cleanly
+        // Resetting the reference allows the chain to be GC'd after pending tasks complete.
+        // Note: tasks already chained onto the old queue before destroy() was called will
+        // still execute, but each checks this.destroyed at entry and exits as a no-op.
         this.stateQueue = Promise.resolve();
         if (this.pollTimer !== null) {
             clearTimeout(this.pollTimer);
@@ -228,11 +230,16 @@ class NasAccessory {
                 await delay(200);
         }
         if (successCount === 0) {
-            this.log.warn('All WOL send attempts failed. Proceeding with verification anyway — first packet may still have reached the NAS.');
+            this.log.warn('All WOL send attempts failed (socket/network error). Proceeding with verification — the first packet may still have been transmitted before the error.');
         }
         else {
-            this.log.info(`WOL packets sent (${successCount}/3 succeeded). Will verify boot for up to ${this.wolVerifyDelay / 1000}s.`);
+            this.log.info(`WOL packets sent (${successCount}/3 succeeded). UDP has no acknowledgement — proceeding to verify boot for up to ${this.wolVerifyDelay / 1000}s.`);
         }
+        // Guard: a new action may have arrived during the 400ms send window.
+        // If the generation is stale, skip verification entirely — scheduleVerify
+        // would exit immediately anyway, but this keeps the pattern explicit.
+        if (this.destroyed || !this.isWolWindowActive())
+            return;
         // Use retry count instead of wall clock deadline — Date.now() is not monotonic
         // and can jump backward on NTP slew or clock changes, causing premature expiry.
         // Math.max(1,...) ensures at least one verification attempt even if wolVerifyDelay

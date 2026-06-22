@@ -259,20 +259,24 @@ The plugin uses Trust On First Use (TOFU). On first connection it stores the hos
 host:port SHA256:base64encodedfingerprint
 ```
 
-For example:
-
+IPv4 example:
 ```
 192.168.1.100:22 SHA256:AbCdEf1234...
 ```
 
+IPv6 example (bracket notation used automatically):
+```
+[fe80::1]:22 SHA256:AbCdEf1234...
+```
+
 You can pre-populate this file manually for scripted deployments, or delete individual lines to force re-verification of a specific host.
 
-> **IPv6 note:** The plugin uses `host:port` as the key in the known hosts file. IPv6 addresses contain multiple colons and will break this parsing. IPv6 target addresses are not supported — always use IPv4 addresses for the `host` field.
+> **IPv6 note:** IPv6 addresses are stored using bracket notation `[host]:port` to avoid colon-collision in the file format. However, IPv6 target addresses have limited testing — IPv4 is recommended for the `host` field.
 
-If the fingerprint changes legitimately (e.g. after reinstalling your NAS OS), verify the new key first:
+If the fingerprint changes legitimately (e.g. after reinstalling your NAS OS), verify the new key with:
 
 ```bash
-ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub
 ```
 
 Then delete the stored fingerprints and restart Homebridge:
