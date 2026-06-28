@@ -5,7 +5,7 @@ import {
   Logger,
 } from 'homebridge';
 import { NasPowerPlatform } from './platform';
-import { SshManager, AmbiguousTimeoutError } from './ssh';
+import { SshManager, AmbiguousTimeoutError, CommandExitError } from './ssh';
 import { sendWol } from './wol';
 import { DeviceConfig } from './types';
 
@@ -113,9 +113,14 @@ export class NasAccessory {
       this.log.warn('Both password and privateKeyPath provided. Private key will be used.');
     }
 
+    const rawPort = config.port ?? 22;
+    if (!Number.isInteger(rawPort) || rawPort < 1 || rawPort > 65535) {
+      throw new Error(`[NasPower] Device "${config.name}" has invalid port: ${rawPort}. Must be 1-65535.`);
+    }
+
     this.ssh = new SshManager({
       host: config.host,
-      port: config.port ?? 22,
+      port: rawPort,
       username: config.username,
       ...(config.password !== undefined && { password: config.password }),
       ...(config.privateKeyPath !== undefined && { privateKeyPath: config.privateKeyPath }),
@@ -357,9 +362,12 @@ export class NasAccessory {
         e.code === 'ECONNABORTED' || e.code === 'ENOTCONN' ||
         e.code === 'ECONNREFUSED' || e.code === 'EHOSTUNREACH';
       const isAmbiguousTimeout = err instanceof AmbiguousTimeoutError;
+      const isNonZeroExit = err instanceof CommandExitError;
 
       if (isExpectedDrop || isAmbiguousTimeout) {
         this.log.info(`SSH connection dropped or target unreachable during shutdown (${e.code ?? 'timeout'}). Polling will confirm.`);
+      } else if (isNonZeroExit) {
+        this.log.info(`Shutdown command exited with non-zero code (${(err as CommandExitError).exitCode}) — treating as ambiguous. Polling will confirm.`);
       } else {
         this.log.error(`Shutdown failed: ${e.message}`);
         this.revertState(true, 'shutdown command failed');

@@ -24,6 +24,18 @@ export class AmbiguousTimeoutError extends Error {
   }
 }
 
+/** Thrown when an SSH command exits with a non-zero code. */
+export class CommandExitError extends Error {
+  constructor(
+    public readonly command: string,
+    public readonly exitCode: number,
+    public readonly detail: string,
+  ) {
+    super(`Command "${command}" exited with code ${exitCode}: ${detail}`);
+    this.name = 'CommandExitError';
+  }
+}
+
 export class SshManager {
 
   private readonly host: string;
@@ -39,7 +51,9 @@ export class SshManager {
   private knownFingerprint: string | null = null;
 
   constructor(opts: SshManagerOptions) {
-    this.host = opts.host;
+    // Strip bracket notation from host if supplied (e.g. [::1] → ::1).
+    // Node.js net.Socket and node-ssh both require bare IPv6 addresses.
+    this.host = opts.host.replace(/^\[|\]$/g, '');
     this.port = opts.port;
     this.username = opts.username;
     if (opts.password !== undefined) this.password = opts.password;
@@ -79,10 +93,9 @@ export class SshManager {
    * ambiguity when splitting lines: "[::1]:22 SHA256:..."
    */
   private getHostKeyIdentifier(): string {
-    // Strip any existing brackets first — a user might supply [::1] directly,
-    // which would otherwise produce [[::1]]:22.
-    const stripped = this.host.replace(/^\[|\]$/g, '');
-    const normalized = stripped.includes(':') ? `[${stripped}]` : stripped;
+    // this.host is already bracket-free (stripped in constructor).
+    // Wrap in brackets only if it's an IPv6 address (contains colon).
+    const normalized = this.host.includes(':') ? `[${this.host}]` : this.host;
     return `${normalized}:${this.port}`;
   }
 
@@ -252,7 +265,7 @@ export class SshManager {
 
       if (result.code !== 0 && result.code !== null) {
         const detail = [result.stderr, result.stdout].filter(Boolean).join(' | ') || '(no output)';
-        throw new Error(`Command "${command}" exited with code ${result.code}: ${detail}`);
+        throw new CommandExitError(command, result.code, detail);
       }
       return result;
     } finally {
