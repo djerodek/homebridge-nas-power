@@ -75,9 +75,13 @@ class NasAccessory {
         if (looseConfig['password'] && looseConfig['privateKeyPath']) {
             this.log.warn('Both password and privateKeyPath provided. Private key will be used.');
         }
+        const rawPort = config.port ?? 22;
+        if (!Number.isInteger(rawPort) || rawPort < 1 || rawPort > 65535) {
+            throw new Error(`[NasPower] Device "${config.name}" has invalid port: ${rawPort}. Must be 1-65535.`);
+        }
         this.ssh = new ssh_1.SshManager({
             host: config.host,
-            port: config.port ?? 22,
+            port: rawPort,
             username: config.username,
             ...(config.password !== undefined && { password: config.password }),
             ...(config.privateKeyPath !== undefined && { privateKeyPath: config.privateKeyPath }),
@@ -310,8 +314,12 @@ class NasAccessory {
                 e.code === 'ECONNABORTED' || e.code === 'ENOTCONN' ||
                 e.code === 'ECONNREFUSED' || e.code === 'EHOSTUNREACH';
             const isAmbiguousTimeout = err instanceof ssh_1.AmbiguousTimeoutError;
+            const isNonZeroExit = err instanceof ssh_1.CommandExitError;
             if (isExpectedDrop || isAmbiguousTimeout) {
                 this.log.info(`SSH connection dropped or target unreachable during shutdown (${e.code ?? 'timeout'}). Polling will confirm.`);
+            }
+            else if (isNonZeroExit) {
+                this.log.info(`Shutdown command exited with non-zero code (${err.exitCode}) — treating as ambiguous. Polling will confirm.`);
             }
             else {
                 this.log.error(`Shutdown failed: ${e.message}`);

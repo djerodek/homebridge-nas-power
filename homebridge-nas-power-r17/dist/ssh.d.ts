@@ -4,6 +4,13 @@ import { SshManagerOptions } from './types';
 export declare class AmbiguousTimeoutError extends Error {
     constructor();
 }
+/** Thrown when an SSH command exits with a non-zero code. */
+export declare class CommandExitError extends Error {
+    readonly command: string;
+    readonly exitCode: number;
+    readonly detail: string;
+    constructor(command: string, exitCode: number, detail: string);
+}
 export declare class SshManager {
     private readonly host;
     private readonly port;

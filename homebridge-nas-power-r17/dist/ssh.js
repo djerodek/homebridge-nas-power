@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SshManager = exports.AmbiguousTimeoutError = void 0;
+exports.SshManager = exports.CommandExitError = exports.AmbiguousTimeoutError = void 0;
 const node_ssh_1 = require("node-ssh");
 const fs = __importStar(require("fs"));
 const fs_1 = require("fs");
@@ -56,10 +56,23 @@ class AmbiguousTimeoutError extends Error {
     }
 }
 exports.AmbiguousTimeoutError = AmbiguousTimeoutError;
+/** Thrown when an SSH command exits with a non-zero code. */
+class CommandExitError extends Error {
+    constructor(command, exitCode, detail) {
+        super(`Command "${command}" exited with code ${exitCode}: ${detail}`);
+        this.command = command;
+        this.exitCode = exitCode;
+        this.detail = detail;
+        this.name = 'CommandExitError';
+    }
+}
+exports.CommandExitError = CommandExitError;
 class SshManager {
     constructor(opts) {
         this.knownFingerprint = null;
-        this.host = opts.host;
+        // Strip bracket notation from host if supplied (e.g. [::1] → ::1).
+        // Node.js net.Socket and node-ssh both require bare IPv6 addresses.
+        this.host = opts.host.replace(/^\[|\]$/g, '');
         this.port = opts.port;
         this.username = opts.username;
         if (opts.password !== undefined)
@@ -97,10 +110,9 @@ class SshManager {
      * ambiguity when splitting lines: "[::1]:22 SHA256:..."
      */
     getHostKeyIdentifier() {
-        // Strip any existing brackets first — a user might supply [::1] directly,
-        // which would otherwise produce [[::1]]:22.
-        const stripped = this.host.replace(/^\[|\]$/g, '');
-        const normalized = stripped.includes(':') ? `[${stripped}]` : stripped;
+        // this.host is already bracket-free (stripped in constructor).
+        // Wrap in brackets only if it's an IPv6 address (contains colon).
+        const normalized = this.host.includes(':') ? `[${this.host}]` : this.host;
         return `${normalized}:${this.port}`;
     }
     loadKnownFingerprint() {
@@ -250,7 +262,7 @@ class SshManager {
             ]);
             if (result.code !== 0 && result.code !== null) {
                 const detail = [result.stderr, result.stdout].filter(Boolean).join(' | ') || '(no output)';
-                throw new Error(`Command "${command}" exited with code ${result.code}: ${detail}`);
+                throw new CommandExitError(command, result.code, detail);
             }
             return result;
         }

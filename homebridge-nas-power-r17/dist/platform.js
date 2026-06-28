@@ -94,13 +94,13 @@ class NasPowerPlatform {
             const existingAccessory = this.cachedAccessories.find(a => a.UUID === uuid);
             try {
                 if (existingAccessory) {
-                    // Sync name if the user renamed the device in config.
-                    // Avoid direct displayName mutation — not documented as settable in all
-                    // Homebridge versions. The Name characteristic in NasAccessory constructor
-                    // handles the HomeKit-visible name; context update persists the change.
+                    // Sync displayName when config name changes.
+                    // Must mutate displayName directly before updatePlatformAccessories —
+                    // storing in context.configName alone does not update the cached displayName
+                    // and causes the rename condition to re-fire on every restart.
                     if (existingAccessory.displayName !== device.name) {
                         this.log.info(`Updating accessory name from "${existingAccessory.displayName}" to "${device.name}"`);
-                        existingAccessory.context.configName = device.name;
+                        existingAccessory.displayName = device.name;
                         this.api.updatePlatformAccessories([existingAccessory]);
                     }
                     else {
