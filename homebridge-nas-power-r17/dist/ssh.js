@@ -51,7 +51,7 @@ const EXEC_TIMEOUT_MS = 30000;
 /** Thrown when an SSH command times out in a context where success is ambiguous. */
 class AmbiguousTimeoutError extends Error {
     constructor() {
-        super('SSH command timed out; NAS may still be shutting down');
+        super('SSH command timed out; target may still be shutting down');
         this.name = 'AmbiguousTimeoutError';
     }
 }

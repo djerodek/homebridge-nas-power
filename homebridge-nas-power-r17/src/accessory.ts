@@ -306,7 +306,7 @@ export class NasAccessory {
 
       if (retryCount >= maxRetries) {
         this.activeWolGeneration = null;
-        this.log.warn('WOL verify deadline reached — NAS did not respond. Reporting OFF.');
+        this.log.warn('WOL verify deadline reached — target did not respond. Reporting OFF.');
         this.currentState = false;
         this.service.updateCharacteristic(this.platform.api.hap.Characteristic.On, false);
         this.wolVerifyTimer = null;
@@ -324,13 +324,13 @@ export class NasAccessory {
 
           if (alive) {
             this.activeWolGeneration = null;
-            this.log.info('Post-WOL check: NAS is UP');
+            this.log.info('Post-WOL check: target is UP');
             if (this.currentState !== true) {
               this.currentState = true;
               this.service.updateCharacteristic(this.platform.api.hap.Characteristic.On, true);
             }
           } else {
-            this.log.info(`Post-WOL check: NAS still offline. Retrying in ${WOL_VERIFY_RETRY_MS / 1000}s... (${retryCount}/${maxRetries})`);
+            this.log.info(`Post-WOL check: target still offline. Retrying in ${WOL_VERIFY_RETRY_MS / 1000}s... (${retryCount}/${maxRetries})`);
             scheduleVerify();
           }
         } catch (err) {
