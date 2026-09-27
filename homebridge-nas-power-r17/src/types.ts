@@ -1,27 +1,16 @@
-import { Logger } from 'homebridge';
-
-// Discriminated union enforces that exactly one auth method is provided at the type level,
-// preventing the undefined+undefined case from reaching runtime validation.
-type PasswordAuth = {
-  password: string;
-  privateKeyPath?: never;
-  passphrase?: never;
-};
-
-type KeyAuth = {
-  privateKeyPath: string;
-  password?: never;
-  passphrase?: string;
-};
-
-type AuthConfig = PasswordAuth | KeyAuth;
-
-export type DeviceConfig = AuthConfig & {
+// Auth fields are all optional at the type level. Homebridge loads config from raw JSON,
+// and the schema, README and runtime all allow password and privateKeyPath together
+// (private key takes priority, password is the fallback). "At least one" is enforced
+// at runtime in platform.ts and accessory.ts.
+export type DeviceConfig = {
   name: string;
   host: string;
   mac?: string;
   port?: number;
   username: string;
+  password?: string;
+  privateKeyPath?: string;
+  passphrase?: string;
   shutdownCommand?: string;
   pollInterval?: number;
   wolVerifyDelay?: number;
@@ -41,6 +30,13 @@ export interface PluginConfig {
   devices?: DeviceConfig[];
 }
 
+/** Minimal logger interface used by the accessory and SSH layers. */
+export interface DeviceLogger {
+  info: (msg: string) => void;
+  warn: (msg: string) => void;
+  error: (msg: string) => void;
+}
+
 export interface SshManagerOptions {
   host: string;
   port: number;
@@ -50,8 +46,7 @@ export interface SshManagerOptions {
   passphrase?: string;
   knownHostsPath?: string;
   execTimeout?: number;
-  // Use the official Homebridge Logger type for full compatibility
-  log: Logger;
+  log: DeviceLogger;
 }
 
 export interface WolOptions {

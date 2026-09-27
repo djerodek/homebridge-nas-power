@@ -4,6 +4,32 @@ All notable changes to homebridge-nas-power are documented here.
 
 ---
 
+## [0.1.14] - 2026-09-26
+
+### Fixed
+- `accessory.ts` — Switch could flip back to ON during a shutdown: polling is now suppressed while the SSH connect/exec is in flight, not only during the post-command cooldown
+- `accessory.ts` — Turning off a target that is already off no longer reverts the switch to ON. `ETIMEDOUT`, `EHOSTDOWN` and `ENETUNREACH` are treated as expected drops; for any other error (e.g. SSH handshake timeout), the switch reverts to ON only if the target is actually reachable
+- `platform.ts` — An invalid device entry no longer unregisters its cached accessory; it is kept inactive so HomeKit rooms, scenes and automations survive a temporary config mistake
+- `platform.ts` — `username` validated at config load alongside `name`, `host` and auth
+- `ssh.ts` — If both `privateKeyPath` and `password` are set and the key file cannot be read, password auth is used instead of failing
+
+### Changed
+- `config.schema.json`, `accessory.ts` — Default `wolVerifyDelay` raised from 10s to 120s; description notes the real window can run slightly longer because each check can take up to 5s
+- `types.ts` — Auth fields are plain optional properties (matches schema, README and runtime); removed `Record<string, unknown>` casts in `accessory.ts` and `platform.ts`
+- `types.ts`, `accessory.ts` — SSH logger typed as a narrow `DeviceLogger` interface; removed `as unknown as Logger` cast
+- `ssh.ts` — Exec timeout timer is `unref()`'d, consistent with other timers
+- `package.json` — `engines.homebridge` and `peerDependencies.homebridge` set to `^1.6.0 || ^2.0.0`
+- `README.md` — Documented `wolVerifyDelay` default, MAC reformatting changes the UUID, invalid-entry handling, password fallback, shutdown polling suppression, and queued toggles waiting for an in-flight shutdown
+
+---
+
+## [0.1.13] - 2026-06-29
+
+### Changed
+- `accessory.ts`, `ssh.ts` — Log messages no longer say "NAS" — replaced with platform-agnostic "target" to reflect support for any SSH-enabled machine
+
+---
+
 ## [0.1.12] - 2026-06-22
 
 ### Fixed

@@ -2,17 +2,17 @@ import {
   PlatformAccessory,
   Service,
   CharacteristicValue,
-  Logger,
 } from 'homebridge';
 import { NasPowerPlatform } from './platform';
 import { SshManager, AmbiguousTimeoutError, CommandExitError } from './ssh';
 import { sendWol } from './wol';
-import { DeviceConfig } from './types';
+import { DeviceConfig, DeviceLogger } from './types';
 
 const MAX_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes
 const FAILURE_THRESHOLD = 3;
 const DEFAULT_SHUTDOWN_COOLDOWN_MS = 30_000;
 const WOL_VERIFY_RETRY_MS = 5_000; // Interval between isAlive() checks during WOL verification window
+const DEFAULT_WOL_VERIFY_MS = 120_000; // Most hardware takes well over 10s to bring SSH up
 
 export class NasAccessory {
   private readonly service: Service;
@@ -33,6 +33,9 @@ export class NasAccessory {
   // stale callbacks from a previous generation cannot clear the active window.
   private activeWolGeneration: number | null = null;
   private shutdownCooldownTimer: ReturnType<typeof setTimeout> | null = null;
+  // True while the SSH shutdown connect/exec is running. Polling is suppressed during
+  // this window: the target is still up, so a poll would flip the switch back to ON.
+  private shutdownInFlight = false;
   private isPolling = false;
   private currentState: boolean | null = null;
   private consecutiveFailures = 0;
@@ -45,11 +48,7 @@ export class NasAccessory {
 
   // Convenience logger that prefixes every message with the device name,
   // eliminating repeated `[${this.name}]` boilerplate throughout the class.
-  private readonly log: {
-    info: (msg: string) => void;
-    warn: (msg: string) => void;
-    error: (msg: string) => void;
-  };
+  private readonly log: DeviceLogger;
 
   // Self-healing queue: always resolves so the queue never gets permanently stuck.
   // handleSet() returns Promise.resolve() immediately so Homebridge never blocks on SSH.
@@ -91,7 +90,7 @@ export class NasAccessory {
     const rawVerifyDelay = Number(config.wolVerifyDelay);
     this.wolVerifyDelay = Number.isFinite(rawVerifyDelay) && rawVerifyDelay >= 5
       ? rawVerifyDelay * 1000
-      : 10_000;
+      : DEFAULT_WOL_VERIFY_MS;
 
     const rawCooldown = Number(config.shutdownCooldownDelay);
     this.shutdownCooldownDelay = Number.isFinite(rawCooldown) && rawCooldown >= 1
@@ -106,11 +105,8 @@ export class NasAccessory {
     if (!this.mac) {
       this.log.warn('No MAC address configured. Power-on (WOL) will not be available.');
     }
-    // Runtime check — Homebridge loads config from raw JSON so TypeScript's discriminated
-    // union cannot enforce mutual exclusivity at runtime. Cast to loose type to check.
-    const looseConfig = config as Record<string, unknown>;
-    if (looseConfig['password'] && looseConfig['privateKeyPath']) {
-      this.log.warn('Both password and privateKeyPath provided. Private key will be used.');
+    if (config.password && config.privateKeyPath) {
+      this.log.warn('Both password and privateKeyPath provided. Private key will be used; password is the fallback if the key cannot be read.');
     }
 
     const rawPort = config.port ?? 22;
@@ -129,7 +125,7 @@ export class NasAccessory {
       ...(config.execTimeout !== undefined && { execTimeout: config.execTimeout }),
       // Pass the device-prefixed logger so SSH log entries are attributed to the
       // correct device in multi-device setups rather than the global platform log.
-      log: this.log as unknown as Logger,
+      log: this.log,
     });
 
     // Accessory information
@@ -184,6 +180,7 @@ export class NasAccessory {
   destroy(): void {
     this.destroyed = true;
     this.activeWolGeneration = null;
+    this.shutdownInFlight = false;
     this.isPolling = false;
     // Resetting the reference allows the chain to be GC'd after pending tasks complete.
     // Note: tasks already chained onto the old queue before destroy() was called will
@@ -350,43 +347,58 @@ export class NasAccessory {
 
   private async handleShutdown(generation: number): Promise<void> {
     this.log.info(`Sending shutdown via SSH`);
+    this.shutdownInFlight = true;
     try {
-      await this.ssh.exec(this.shutdownCommand, true);
-      if (this.destroyed) return;
-      this.log.info(`Shutdown command sent.`);
-    } catch (err) {
-      if (this.destroyed) return;
-      const e = err as NodeJS.ErrnoException;
-      const isExpectedDrop =
-        e.code === 'ECONNRESET' || e.code === 'EPIPE' ||
-        e.code === 'ECONNABORTED' || e.code === 'ENOTCONN' ||
-        e.code === 'ECONNREFUSED' || e.code === 'EHOSTUNREACH';
-      const isAmbiguousTimeout = err instanceof AmbiguousTimeoutError;
-      const isNonZeroExit = err instanceof CommandExitError;
+      try {
+        await this.ssh.exec(this.shutdownCommand, true);
+        if (this.destroyed) return;
+        this.log.info(`Shutdown command sent.`);
+      } catch (err) {
+        if (this.destroyed) return;
+        const e = err as NodeJS.ErrnoException;
+        const isExpectedDrop =
+          e.code === 'ECONNRESET' || e.code === 'EPIPE' ||
+          e.code === 'ECONNABORTED' || e.code === 'ENOTCONN' ||
+          e.code === 'ECONNREFUSED' || e.code === 'EHOSTUNREACH' ||
+          e.code === 'ETIMEDOUT' || e.code === 'EHOSTDOWN' || e.code === 'ENETUNREACH';
+        const isAmbiguousTimeout = err instanceof AmbiguousTimeoutError;
+        const isNonZeroExit = err instanceof CommandExitError;
 
-      if (isExpectedDrop || isAmbiguousTimeout) {
-        this.log.info(`SSH connection dropped or target unreachable during shutdown (${e.code ?? 'timeout'}). Polling will confirm.`);
-      } else if (isNonZeroExit) {
-        this.log.info(`Shutdown command exited with non-zero code (${(err as CommandExitError).exitCode}) — treating as ambiguous. Polling will confirm.`);
-      } else {
-        this.log.error(`Shutdown failed: ${e.message}`);
-        this.revertState(true, 'shutdown command failed');
-        return;
+        if (isExpectedDrop || isAmbiguousTimeout) {
+          this.log.info(`SSH connection dropped or target unreachable during shutdown (${e.code ?? 'timeout'}). Polling will confirm.`);
+        } else if (isNonZeroExit) {
+          this.log.info(`Shutdown command exited with non-zero code (${(err as CommandExitError).exitCode}) — treating as ambiguous. Polling will confirm.`);
+        } else {
+          // Unrecognised error — e.g. an SSH handshake timeout (no error code) or an
+          // authentication failure. Revert to ON only if the target is actually reachable;
+          // if it is not, it is already off (common with "turn everything off" automations).
+          const reachable = await this.ssh.isAlive().catch(() => false);
+          if (this.destroyed) return;
+          if (reachable) {
+            this.log.error(`Shutdown failed: ${e.message}`);
+            this.revertState(true, 'shutdown command failed');
+            return;
+          }
+          this.log.info(`Shutdown could not connect (${e.message}) and target is not reachable — treating as already off.`);
+        }
       }
+
+      if (this.destroyed) return;
+
+      // Defensive: the serial stateQueue means no other action can run while this one
+      // is in progress, but skip the cooldown if the generation has somehow moved on.
+      if (this.wolVerifyGeneration !== generation) return;
+
+      // Set the cooldown before shutdownInFlight is cleared (finally runs after this),
+      // so there is no gap in which a poll could run.
+      const timer = setTimeout(() => {
+        this.shutdownCooldownTimer = null;
+      }, this.shutdownCooldownDelay);
+      timer.unref();
+      this.shutdownCooldownTimer = timer;
+    } finally {
+      this.shutdownInFlight = false;
     }
-
-    if (this.destroyed) return;
-
-    // Guard against a queued WOL action that started while this SSH exec was in-flight.
-    // If wolVerifyGeneration has advanced, a new action is already running — setting
-    // the cooldown timer here would suppress polling during the active WOL window.
-    if (this.wolVerifyGeneration !== generation) return;
-
-    const timer = setTimeout(() => {
-      this.shutdownCooldownTimer = null;
-    }, this.shutdownCooldownDelay);
-    timer.unref();
-    this.shutdownCooldownTimer = timer;
   }
 
   // ── Polling ──────────────────────────────────────────────────────────────────
@@ -394,9 +406,9 @@ export class NasAccessory {
   private async poll(): Promise<void> {
     if (this.isPolling || this.destroyed) return;
 
-    // Skip while WOL verification or shutdown cooldown is active to prevent
+    // Skip while WOL verification, an SSH shutdown or the shutdown cooldown is active to prevent
     // poll results from flickering the switch during power transitions.
-    if (this.isWolWindowActive() || this.shutdownCooldownTimer !== null) {
+    if (this.isTransitionActive()) {
       this.schedulePoll();
       return;
     }
@@ -407,9 +419,8 @@ export class NasAccessory {
       this.consecutiveFailures = 0;
 
       // Re-check guards after the async gap — a user may have toggled the switch
-      // while we were waiting for the TCP probe. Uses isWolWindowActive() for
-      // consistency with the pre-poll guard above.
-      if (this.destroyed || this.isWolWindowActive() || this.shutdownCooldownTimer !== null) {
+      // while we were waiting for the TCP probe.
+      if (this.destroyed || this.isTransitionActive()) {
         return;
       }
 
@@ -459,6 +470,11 @@ export class NasAccessory {
   private isWolWindowActive(): boolean {
     return this.activeWolGeneration !== null &&
       this.activeWolGeneration === this.wolVerifyGeneration;
+  }
+
+  /** True while a WOL verify window, an SSH shutdown, or the post-shutdown cooldown is active. */
+  private isTransitionActive(): boolean {
+    return this.isWolWindowActive() || this.shutdownInFlight || this.shutdownCooldownTimer !== null;
   }
 
   private revertState(state: boolean, reason?: string): void {

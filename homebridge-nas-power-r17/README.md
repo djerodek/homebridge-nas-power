@@ -229,12 +229,12 @@ The `shutdownCommand` config value is executed directly on the NAS over SSH with
 | `mac` | No | — | MAC address for WOL. If omitted, power-on is unavailable |
 | `port` | No | `22` | SSH port |
 | `username` | Yes | — | SSH username |
-| `password` | Conditional | — | SSH password. Required if `privateKeyPath` not set |
+| `password` | Conditional | — | SSH password. Required if `privateKeyPath` not set. If both are set, the key is used and the password is the fallback when the key file cannot be read |
 | `privateKeyPath` | Conditional | — | Path to SSH private key. Required if `password` not set |
 | `passphrase` | No | — | Passphrase for an encrypted private key. Only meaningful when `privateKeyPath` is set |
 | `shutdownCommand` | No | `sudo shutdown -h now` | Command to run over SSH to shut down the NAS |
 | `pollInterval` | No | `30` | Seconds between state polls (min 5) |
-| `wolVerifyDelay` | No | `10` | Duration in seconds of the boot verification window after WOL. The plugin retries every 5s within this window — minimum 5s. Increase for slow-booting hardware |
+| `wolVerifyDelay` | No | `120` | Duration in seconds of the boot verification window after WOL (min 5). The plugin checks every 5s; each check can take up to 5s more, so the real window can be somewhat longer than this value |
 | `shutdownCooldownDelay` | No | `30` | Seconds to suppress polling after a shutdown command to prevent the switch flickering back to ON. Cancelled immediately if the user toggles the switch again |
 | `execTimeout` | No | `30` | Seconds to wait for the SSH shutdown command before timing out. Increase for slow-shutting hardware |
 | `wolBroadcastAddress` | No | `255.255.255.255` | WOL broadcast address. Change for VLAN setups. IPv4 only — WOL does not support IPv6 |
@@ -246,6 +246,10 @@ The `shutdownCommand` config value is executed directly on the NAS over SSH with
 | `hardwareRevision` | No | — | Shown in HomeKit accessory info |
 
 > **UUID stability:** Each device's HomeKit UUID is derived from its MAC address. If no MAC is provided, the UUID falls back to `name + host`. Changing the name or IP without a MAC causes HomeKit to treat it as a new accessory. Providing a MAC is strongly recommended.
+>
+> The MAC is used exactly as typed, so reformatting it (e.g. `AA:BB:…` → `aa-bb-…`) also changes the UUID. To change the format without losing HomeKit history, set `uuidOverride` to the previous value first.
+>
+> **Invalid config entries:** If a device entry fails validation (e.g. missing `username` or both auth fields blank), its cached accessory is kept but inactive rather than removed, so rooms, scenes and automations survive a temporary config mistake. HomeKit may show it as "No Response" until the entry is fixed.
 
 ---
 
@@ -322,20 +326,22 @@ When power-on is triggered:
    - NAS responds → switch stays ON
    - Deadline expires → switch reverts to OFF and polling resumes
 
-This means a NAS that takes 45 seconds to boot will be detected correctly as long as `wolVerifyDelay` is set high enough (default 10s — increase for slow hardware).
+This means a NAS that takes 45 seconds to boot will be detected correctly as long as `wolVerifyDelay` is set high enough (default 120s).
 
 ### Shutdown behavior
 
 - The shutdown command is sent over SSH.
 - Most Linux NAS systems drop the SSH connection mid-shutdown — this is expected and treated as success, not an error.
 - Shutdown success is **not** verified by SSH exit code alone — the plugin relies on subsequent polling to confirm the NAS is offline.
+- Polling is suppressed while the SSH connection and command are running, so the switch cannot flip back to ON mid-shutdown.
+- If the SSH connection fails and the target is unreachable, it is treated as already off and the switch stays OFF. The switch reverts to ON only when the target is reachable but the command fails (e.g. an authentication error).
 - Polling is suppressed for `shutdownCooldownDelay` seconds (default 30s) after the command is sent to prevent the switch flickering back to ON while the NAS powers down.
 - If the user toggles the switch during the cooldown window, the cooldown is cancelled immediately and the new action proceeds.
 
 ### Polling and backoff
 
 - Polling checks SSH port reachability every `pollInterval` seconds (default 30s).
-- Polling is **suspended** during WOL verification and shutdown cooldown windows.
+- Polling is **suspended** during WOL verification, while an SSH shutdown is running, and during the shutdown cooldown.
 - On consecutive failures, polling uses **exponential backoff** (interval × 2ⁿ) up to a maximum of 5 minutes, reducing network load during extended downtime.
 - On the next successful check or user-initiated action, the backoff resets.
 
@@ -344,6 +350,8 @@ This means a NAS that takes 45 seconds to boot will be detected correctly as lon
 The HomeKit switch updates optimistically (immediately on user action). Actual state changes take time — shutdown may take 30s to several minutes; boot typically 30–120s depending on hardware.
 
 **HomeKit automation note:** Because `handleSet` returns immediately (to prevent the Home app spinner), HomeKit automations may briefly see a false-positive state before verification corrects it. This is a deliberate UX trade-off — the switch feels instantaneous but HomeKit loses direct transactional feedback. The optimistic update is corrected by WOL verification and polling within seconds.
+
+**Queued toggles:** Actions run one at a time. If you turn the switch back ON while a shutdown is still running, the WOL packet is sent only after the SSH command finishes or times out (up to about `execTimeout` + 5s).
 
 ---
 
@@ -354,7 +362,7 @@ The HomeKit switch updates optimistically (immediately on user action). Actual s
 - **Energy Efficient Ethernet (EEE):** Can interfere with WOL. Disable in NAS network adapter settings.
 - **VLAN isolation:** Magic packets won't cross VLAN boundaries. Use `wolBroadcastAddress` with a subnet-directed broadcast (e.g. `192.168.1.255`).
 - **Router blocking broadcasts:** Use a directed broadcast address instead of `255.255.255.255`.
-- **Slow-booting hardware:** Increase `wolVerifyDelay` beyond the default 10s. The plugin retries every 5s until the deadline, so a value of 60–120s covers most hardware.
+- **Slow-booting hardware:** The default `wolVerifyDelay` of 120s covers most hardware. Increase it if the switch reports OFF before the target finishes booting.
 
 ---
 

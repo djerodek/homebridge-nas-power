@@ -1,6 +1,6 @@
 {
   "name": "homebridge-nas-power",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Homebridge plugin to control NAS or Mac power via Wake-on-LAN and SSH shutdown. Works with any Linux-based NAS or macOS machine. Includes SSH host key verification.",
   "main": "dist/index.js",
   "license": "MIT",
@@ -37,7 +37,7 @@
   ],
   "engines": {
     "node": ">=18.0.0",
-    "homebridge": ">=1.6.0"
+    "homebridge": "^1.6.0 || ^2.0.0"
   },
   "dependencies": {
     "node-ssh": "^13.2.0"
@@ -52,6 +52,6 @@
     "@typescript-eslint/eslint-plugin": "^6.0.0"
   },
   "peerDependencies": {
-    "homebridge": ">=1.6.0"
+    "homebridge": "^1.6.0 || ^2.0.0"
   }
 }
