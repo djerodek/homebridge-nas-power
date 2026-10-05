@@ -17,6 +17,7 @@ export type DeviceConfig = {
   shutdownCooldownDelay?: number;
   wolBroadcastAddress?: string;
   knownHostsPath?: string;
+  hostFingerprint?: string;
   execTimeout?: number;
   uuidOverride?: string;
   manufacturer?: string;
@@ -45,6 +46,7 @@ export interface SshManagerOptions {
   privateKeyPath?: string;
   passphrase?: string;
   knownHostsPath?: string;
+  hostFingerprint?: string;
   execTimeout?: number;
   log: DeviceLogger;
 }

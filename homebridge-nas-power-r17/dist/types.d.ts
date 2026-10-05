@@ -1,21 +1,12 @@
-import { Logger } from 'homebridge';
-type PasswordAuth = {
-    password: string;
-    privateKeyPath?: never;
-    passphrase?: never;
-};
-type KeyAuth = {
-    privateKeyPath: string;
-    password?: never;
-    passphrase?: string;
-};
-type AuthConfig = PasswordAuth | KeyAuth;
-export type DeviceConfig = AuthConfig & {
+export type DeviceConfig = {
     name: string;
     host: string;
     mac?: string;
     port?: number;
     username: string;
+    password?: string;
+    privateKeyPath?: string;
+    passphrase?: string;
     shutdownCommand?: string;
     pollInterval?: number;
     wolVerifyDelay?: number;
@@ -33,6 +24,12 @@ export interface PluginConfig {
     name: string;
     devices?: DeviceConfig[];
 }
+/** Minimal logger interface used by the accessory and SSH layers. */
+export interface DeviceLogger {
+    info: (msg: string) => void;
+    warn: (msg: string) => void;
+    error: (msg: string) => void;
+}
 export interface SshManagerOptions {
     host: string;
     port: number;
@@ -42,11 +39,10 @@ export interface SshManagerOptions {
     passphrase?: string;
     knownHostsPath?: string;
     execTimeout?: number;
-    log: Logger;
+    log: DeviceLogger;
 }
 export interface WolOptions {
     address?: string;
     port?: number;
 }
-export {};
 //# sourceMappingURL=types.d.ts.map

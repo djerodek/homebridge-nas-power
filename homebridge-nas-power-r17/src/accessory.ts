@@ -122,6 +122,7 @@ export class NasAccessory {
       ...(config.privateKeyPath !== undefined && { privateKeyPath: config.privateKeyPath }),
       ...(config.passphrase !== undefined && { passphrase: config.passphrase }),
       ...(config.knownHostsPath !== undefined && { knownHostsPath: config.knownHostsPath }),
+      ...(config.hostFingerprint !== undefined && { hostFingerprint: config.hostFingerprint }),
       ...(config.execTimeout !== undefined && { execTimeout: config.execTimeout }),
       // Pass the device-prefixed logger so SSH log entries are attributed to the
       // correct device in multi-device setups rather than the global platform log.
@@ -243,7 +244,7 @@ export class NasAccessory {
       // automatically return false when wolVerifyGeneration increments on next action,
       // eliminating the need for manual cleanup in each callback.
       this.activeWolGeneration = generation;
-      await this.handleWakeOnLan(generation);
+      await this.handleWakeOnLan();
     } else {
       // Ensure no WOL window is considered active during shutdown
       this.activeWolGeneration = null;
@@ -253,7 +254,7 @@ export class NasAccessory {
 
   // ── WOL ─────────────────────────────────────────────────────────────────────
 
-  private async handleWakeOnLan(generation: number): Promise<void> {
+  private async handleWakeOnLan(): Promise<void> {
     if (!this.mac) {
       this.log.warn('No MAC address configured for WOL.');
       // Clear the WOL window set by handleSetInternal — without this, polling

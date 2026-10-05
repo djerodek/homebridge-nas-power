@@ -37,16 +37,18 @@ class NasPowerPlatform {
     }
     discoverDevices() {
         const devices = this.config.devices ?? [];
-        // Build safe UUID source — coerce to string to prevent NaN crashing uuid.generate()
+        // UUID seed: uuidOverride ?? mac ?? name+host (unchanged precedence, so existing UUIDs
+        // are preserved). Returns null when no seed can be built without undefined parts —
+        // prevents ghost UUIDs like "undefinedundefined". The MAC is hashed exactly as typed,
+        // so reformatting it changes the UUID (documented in the README; use uuidOverride).
         const safeUuidSource = (d) => {
-            const raw = d.uuidOverride ?? d.mac ?? (d.name + d.host);
-            if (raw === undefined || raw === null)
-                return null;
-            return typeof raw === 'string' ? raw : String(raw);
+            const explicit = d.uuidOverride ?? d.mac;
+            if (explicit !== undefined && explicit !== null)
+                return String(explicit);
+            if (typeof d.name === 'string' && typeof d.host === 'string')
+                return d.name + d.host;
+            return null;
         };
-        // Validate first — filter out malformed devices before building the UUID set.
-        // Without this, safeUuidSource runs against undefined fields, producing ghost UUIDs
-        // like "undefinedundefined" that prevent stale accessory cleanup from working correctly.
         const validDevices = devices.filter(device => {
             if (!device.name || typeof device.name !== 'string') {
                 this.log.error(`[Platform] Device missing a valid "name" (must be a string). Found: ${String(device.name)}. Skipping.`);
@@ -56,19 +58,36 @@ class NasPowerPlatform {
                 this.log.error(`[Platform] Device "${device.name}" missing a valid "host" (must be a string). Skipping.`);
                 return false;
             }
+            if (!device.username || typeof device.username !== 'string') {
+                this.log.error(`[Platform] Device "${device.name}" missing a valid "username" (must be a string). Skipping.`);
+                return false;
+            }
             // Validate auth early so the error surfaces at config-load time rather than
             // inside the accessory constructor where it is harder to diagnose.
-            const loose = device;
-            if (!loose['password'] && !loose['privateKeyPath']) {
+            if (!device.password && !device.privateKeyPath) {
                 this.log.error(`[Platform] Device "${device.name}" requires either "password" or "privateKeyPath". Skipping.`);
                 return false;
             }
             return true;
         });
-        const configuredUuids = new Set(validDevices
+        // Stale-removal uses every configured entry that yields a UUID, including entries that
+        // failed validation. A temporary config error (typo, blank password) must not unregister
+        // the cached accessory — that would delete its room, scenes and automations in HomeKit.
+        // Such accessories stay registered but inactive until the config is fixed.
+        const configuredUuids = new Set(devices
             .map(d => safeUuidSource(d))
             .filter((s) => s !== null)
             .map(s => this.api.hap.uuid.generate(s)));
+        const validUuids = new Set(validDevices
+            .map(d => safeUuidSource(d))
+            .filter((s) => s !== null)
+            .map(s => this.api.hap.uuid.generate(s)));
+        for (const a of this.cachedAccessories) {
+            if (configuredUuids.has(a.UUID) && !validUuids.has(a.UUID)) {
+                this.log.warn(`[Platform] Accessory "${a.displayName}" kept but inactive because its config entry is invalid. ` +
+                    'Fix the config to restore it; HomeKit may show it as "No Response" until then.');
+            }
+        }
         // Remove accessories no longer in config
         const stale = this.cachedAccessories.filter(a => !configuredUuids.has(a.UUID));
         if (stale.length > 0) {

@@ -164,7 +164,9 @@ ssh-copy-id -i ~/.homebridge/nas_key.pub yourusername@192.168.1.100
 
 ## Security: Shutdown Command
 
-The `shutdownCommand` config value is executed directly on the NAS over SSH without sanitization. **Only use trusted values here.** Do not expose your Homebridge `config.json` to untrusted users.
+The `shutdownCommand` config value is executed directly on the NAS over SSH without sanitization. **Only use trusted values here.** Do not expose your Homebridge `config.json` to untrusted users: anyone who can edit it can run any command the SSH account is allowed to run. Restrict that account to the shutdown command only (see [Dedicated Low-Privilege User](#best-practice--dedicated-low-privilege-user)).
+
+The default `sudo shutdown -h now` is not guaranteed on every system. Treat `shutdownCommand` as installation-specific and test it once over SSH by hand.
 
 ---
 
@@ -234,11 +236,12 @@ The `shutdownCommand` config value is executed directly on the NAS over SSH with
 | `passphrase` | No | — | Passphrase for an encrypted private key. Only meaningful when `privateKeyPath` is set |
 | `shutdownCommand` | No | `sudo shutdown -h now` | Command to run over SSH to shut down the NAS |
 | `pollInterval` | No | `30` | Seconds between state polls (min 5) |
-| `wolVerifyDelay` | No | `120` | Duration in seconds of the boot verification window after WOL (min 5). The plugin checks every 5s; each check can take up to 5s more, so the real window can be somewhat longer than this value |
+| `wolVerifyDelay` | No | `120` | Duration in seconds of the boot verification window after WOL (min 5). The plugin checks every 5s; each check can take up to 5s more, so the real window can be up to about twice this value when the target stays offline |
 | `shutdownCooldownDelay` | No | `30` | Seconds to suppress polling after a shutdown command to prevent the switch flickering back to ON. Cancelled immediately if the user toggles the switch again |
 | `execTimeout` | No | `30` | Seconds to wait for the SSH shutdown command before timing out. Increase for slow-shutting hardware |
 | `wolBroadcastAddress` | No | `255.255.255.255` | WOL broadcast address. Change for VLAN setups. IPv4 only — WOL does not support IPv6 |
 | `uuidOverride` | No | — | Advanced: manually specify the UUID seed string for this device. Use when you need a stable UUID that is independent of MAC address or name/host — for example, to rename a device without losing HomeKit history |
+| `hostFingerprint` | No | — | Advanced: pin the target's SSH host key (`SHA256:...`) instead of trusting it on first connection. When set, the known hosts file is not used for this device. See [SSH Host Key Verification](#ssh-host-key-verification) |
 | `knownHostsPath` | No | `$HOMEBRIDGE_USER_STORAGE_PATH/nas-power-known-hosts` | Path for SSH fingerprint storage. The directory is created automatically if it does not exist |
 | `manufacturer` | No | `NAS` | Shown in HomeKit accessory info |
 | `model` | No | `NAS` | Shown in HomeKit accessory info |
@@ -257,6 +260,14 @@ The `shutdownCommand` config value is executed directly on the NAS over SSH with
 
 The plugin uses Trust On First Use (TOFU). On first connection it stores the host's SHA256 fingerprint. All subsequent connections verify against it, protecting against MITM attacks.
 
+TOFU trusts whatever answers the very first connection. To remove that window, pin the fingerprint in config with `hostFingerprint`. Get it on the target with:
+
+```bash
+ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+```
+
+and copy the `SHA256:...` part. If the plugin logs a mismatch, the log shows the fingerprint it actually received, which tells you which key type the target offered. A pinned fingerprint is checked strictly and the known hosts file is not read or written for that device.
+
 **Known-hosts file format:** Each line stores one host entry:
 
 ```
@@ -273,7 +284,7 @@ IPv6 example (bracket notation used automatically):
 [fe80::1]:22 SHA256:AbCdEf1234...
 ```
 
-You can pre-populate this file manually for scripted deployments, or delete individual lines to force re-verification of a specific host.
+You can pre-populate this file manually for scripted deployments (the `SHA256:` value from `ssh-keygen -lf` works as-is, with or without trailing `=`), or delete individual lines to force re-verification of a specific host. The file is rewritten atomically with `0600` permissions whenever a new fingerprint is saved.
 
 > **IPv6 note:** IPv6 addresses are stored using bracket notation `[host]:port` to avoid colon-collision in the file format. However, IPv6 target addresses have limited testing — IPv4 is recommended for the `host` field.
 

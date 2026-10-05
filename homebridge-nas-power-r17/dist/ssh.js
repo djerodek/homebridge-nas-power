@@ -98,7 +98,8 @@ class SshManager {
             }
             catch (err) {
                 this.log.error(`[SSH] Failed to read private key at ${this.privateKeyPath}: ${err.message}. ` +
-                    'Will retry on first connection.');
+                    'Will retry on first connection' +
+                    (this.password ? '; password auth will be used if the retry fails.' : '.'));
             }
         }
         this.loadKnownFingerprint();
@@ -216,7 +217,13 @@ class SshManager {
                 }
             }
             catch (err) {
-                throw new Error(`Private key at ${this.privateKeyPath} could not be read: ${err.message}`);
+                const reason = err.message;
+                if (!this.password) {
+                    throw new Error(`Private key at ${this.privateKeyPath} could not be read: ${reason}`);
+                }
+                // Both fields configured — fall back to password rather than failing outright.
+                this.log.warn(`[SSH] Private key at ${this.privateKeyPath} could not be read (${reason}). Using password auth.`);
+                connectOpts.password = this.password;
             }
         }
         else if (this.password) {
@@ -258,6 +265,7 @@ class SshManager {
                             ? new AmbiguousTimeoutError()
                             : new Error('SSH command execution timed out'));
                     }, this.execTimeoutMs);
+                    timeoutId.unref();
                 }),
             ]);
             if (result.code !== 0 && result.code !== null) {

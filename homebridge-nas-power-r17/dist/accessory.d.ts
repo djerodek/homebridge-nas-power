@@ -17,6 +17,7 @@ export declare class NasAccessory {
     private wolVerifyTimer;
     private activeWolGeneration;
     private shutdownCooldownTimer;
+    private shutdownInFlight;
     private isPolling;
     private currentState;
     private consecutiveFailures;
@@ -41,6 +42,8 @@ export declare class NasAccessory {
      * invalidates all previous callbacks without requiring explicit cleanup in each one.
      */
     private isWolWindowActive;
+    /** True while a WOL verify window, an SSH shutdown, or the post-shutdown cooldown is active. */
+    private isTransitionActive;
     private revertState;
 }
 //# sourceMappingURL=accessory.d.ts.map

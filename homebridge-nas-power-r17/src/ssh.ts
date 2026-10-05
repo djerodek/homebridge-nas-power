@@ -13,8 +13,18 @@ const HOMEBRIDGE_STORAGE = process.env['HOMEBRIDGE_USER_STORAGE_PATH']
   ?? path.join(os.homedir(), '.homebridge');
 const DEFAULT_KNOWN_HOSTS = path.join(HOMEBRIDGE_STORAGE, 'nas-power-known-hosts');
 
-const SSH_TIMEOUT_MS = 5000;
+const SSH_TIMEOUT_MS = 5000;        // TCP reachability probe (isAlive)
+const SSH_READY_TIMEOUT_MS = 20_000; // SSH handshake + auth for exec. Longer than the probe:
+                                     // a busy NAS or sshd reverse-DNS lookup can exceed 5s.
 const EXEC_TIMEOUT_MS = 30_000;
+
+/**
+ * Normalise a SHA256 fingerprint for comparison. Accepts "SHA256:abc=", "SHA256:abc" or "abc".
+ * Node's base64 output keeps "=" padding; ssh-keygen -lf omits it. Both must compare equal.
+ */
+export function normaliseFingerprint(fp: string): string {
+  return fp.trim().replace(/^SHA256:/i, '').replace(/=+$/, '');
+}
 
 /** Thrown when an SSH command times out in a context where success is ambiguous. */
 export class AmbiguousTimeoutError extends Error {
@@ -49,6 +59,8 @@ export class SshManager {
   private readonly log: SshManagerOptions['log'];
   private readonly execTimeoutMs: number;
   private knownFingerprint: string | null = null;
+  // Fingerprint pinned in config. When set, TOFU and the known-hosts file are bypassed entirely.
+  private readonly pinnedFingerprint: string | null;
 
   constructor(opts: SshManagerOptions) {
     // Strip bracket notation from host if supplied (e.g. [::1] → ::1).
@@ -64,6 +76,9 @@ export class SshManager {
       ? opts.knownHostsPath
       : DEFAULT_KNOWN_HOSTS;
     this.log = opts.log;
+    this.pinnedFingerprint = opts.hostFingerprint && opts.hostFingerprint.trim() !== ''
+      ? normaliseFingerprint(opts.hostFingerprint)
+      : null;
     const rawExec = Number(opts.execTimeout);
     this.execTimeoutMs = Number.isFinite(rawExec) && rawExec >= 5
       ? rawExec * 1000
@@ -83,7 +98,9 @@ export class SshManager {
       }
     }
 
-    this.loadKnownFingerprint();
+    if (this.pinnedFingerprint === null) {
+      this.loadKnownFingerprint();
+    }
   }
 
   // ── Known hosts ─────────────────────────────────────────────────────────────
@@ -103,17 +120,18 @@ export class SshManager {
   private loadKnownFingerprint(): void {
     try {
       if (fs.existsSync(this.knownHostsPath)) {
-        const data = fs.readFileSync(this.knownHostsPath, 'utf8').trim();
-        const lines = data.split('\n').filter(Boolean);
+        const lines = this.readKnownHostsLines();
         // Format: "host:port SHA256:base64fingerprint" — one entry per line.
         // This is a private format specific to this plugin and is NOT interchangeable
         // with a standard OpenSSH ~/.ssh/known_hosts file.
         // IPv6 hosts are stored as [host]:port to avoid colon ambiguity.
         const identifier = this.getHostKeyIdentifier();
         for (const line of lines) {
-          const [storedHost, fingerprint] = line.split(' ', 2);
-          if (storedHost === identifier) {
-            this.knownFingerprint = fingerprint ?? null;
+          // Whitespace-tolerant: handles multiple spaces, tabs and CRLF line endings
+          // from hand-edited files.
+          const [storedHost, fingerprint] = line.split(/\s+/);
+          if (storedHost === identifier && fingerprint) {
+            this.knownFingerprint = fingerprint;
             this.log.info(`[SSH] Loaded known fingerprint for ${this.host}`);
             return;
           }
@@ -124,33 +142,42 @@ export class SshManager {
     }
   }
 
+  private readKnownHostsLines(): string[] {
+    return fs.readFileSync(this.knownHostsPath, 'utf8')
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(Boolean);
+  }
+
   private saveFingerprint(fingerprint: string): void {
-    // Synchronous write: fingerprint saving is a rare, one-shot event per device lifetime.
-    // Not truly atomic (four syscalls: mkdirSync, existsSync, readFileSync, writeFileSync),
-    // but benign at Homebridge plugin scale — at worst one entry is lost and re-saved on
-    // the next connection.
+    // The whole read-modify-write is synchronous, so two devices in the same Homebridge
+    // process cannot interleave. The write goes to a temp file that is then renamed over
+    // the target: rename is atomic, so a crash or power loss mid-write cannot truncate the
+    // file and wipe every stored fingerprint.
     const storedValue = `SHA256:${fingerprint}`;
     this.knownFingerprint = storedValue;
     const identifier = this.getHostKeyIdentifier();
+    const tmpPath = `${this.knownHostsPath}.${process.pid}.tmp`;
     try {
       const dir = path.dirname(this.knownHostsPath);
       fs.mkdirSync(dir, { recursive: true });
 
       let lines: string[] = [];
       if (fs.existsSync(this.knownHostsPath)) {
-        lines = fs.readFileSync(this.knownHostsPath, 'utf8').trim().split('\n').filter(Boolean);
+        lines = this.readKnownHostsLines();
       }
 
-      lines = lines.filter(l => !l.startsWith(`${identifier} `));
+      lines = lines.filter(l => l.split(/\s+/)[0] !== identifier);
       lines.push(`${identifier} ${storedValue}`);
 
-      // 0o600: owner read/write only — good hygiene for a trust store file
-      fs.writeFileSync(this.knownHostsPath, lines.join('\n') + '\n', {
-        encoding: 'utf8',
-        mode: 0o600,
-      });
+      // 0o600: owner read/write only. Applied to the temp file, so the renamed file always
+      // ends up 0o600 even if an earlier version of the file was more permissive.
+      fs.writeFileSync(tmpPath, lines.join('\n') + '\n', { encoding: 'utf8', mode: 0o600 });
+      fs.chmodSync(tmpPath, 0o600); // mode is ignored if a stale temp file already existed
+      fs.renameSync(tmpPath, this.knownHostsPath);
       this.log.info(`[SSH] Saved fingerprint for ${this.host}`);
     } catch (err) {
+      try { fs.unlinkSync(tmpPath); } catch { /* temp file may not exist */ }
       this.log.warn(
         `[SSH] Could not persist fingerprint to disk: ${(err as Error).message}. ` +
         'Verification will work this session but won\'t survive a restart.',
@@ -163,6 +190,20 @@ export class SshManager {
       const raw = crypto.createHash('sha256').update(hostKey).digest('base64');
       const fingerprint = `SHA256:${raw}`;
 
+      // Pinned fingerprint from config: strict check, no TOFU, nothing persisted.
+      if (this.pinnedFingerprint !== null) {
+        if (normaliseFingerprint(raw) === this.pinnedFingerprint) return true;
+        this.log.error(
+          `[SSH] HOST KEY MISMATCH for ${this.host}!\n` +
+          `  Configured hostFingerprint: SHA256:${this.pinnedFingerprint}\n` +
+          `  Got:                        SHA256:${normaliseFingerprint(raw)}\n` +
+          `  If expected (e.g. you reinstalled the OS), verify the new key on the target with:\n` +
+          `    ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub\n` +
+          `  Then update "hostFingerprint" in your config and restart Homebridge.`,
+        );
+        return false;
+      }
+
       if (!this.knownFingerprint) {
         this.log.warn(
           `[SSH] First connection to ${this.host} — trusting and storing fingerprint ${fingerprint}`,
@@ -171,7 +212,7 @@ export class SshManager {
         return true;
       }
 
-      if (this.knownFingerprint === fingerprint) {
+      if (normaliseFingerprint(this.knownFingerprint) === normaliseFingerprint(raw)) {
         return true;
       }
 
@@ -196,7 +237,7 @@ export class SshManager {
       host: this.host,
       port: this.port,
       username: this.username,
-      readyTimeout: SSH_TIMEOUT_MS,
+      readyTimeout: SSH_READY_TIMEOUT_MS,
       hostVerifier: this.fingerprintVerifier(),
     };
 

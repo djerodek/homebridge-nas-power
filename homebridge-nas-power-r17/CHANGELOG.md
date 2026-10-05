@@ -4,6 +4,24 @@ All notable changes to homebridge-nas-power are documented here.
 
 ---
 
+## [0.1.15] - 2026-10-04
+
+### Fixed
+- `ssh.ts` — Known hosts entries written by `ssh-keygen -lf` (no trailing `=`) were rejected as a host key mismatch; fingerprints are now compared without base64 padding, so manually pre-populated files work as the README describes
+- `ssh.ts` — Known hosts file is written to a temp file and renamed into place, so a crash or power loss mid-write can no longer truncate it and lose every stored fingerprint; the file is always left at `0600`, including when an older version was more permissive
+- `ssh.ts` — Known hosts parsing tolerates CRLF line endings, tabs and multiple spaces from hand-edited files
+- `ssh.ts` — SSH handshake timeout for the shutdown command raised from 5s to 20s; a slow handshake (busy NAS, sshd reverse-DNS lookup) no longer fails the shutdown and reverts the switch to ON. The 5s reachability probe is unchanged
+- `accessory.ts` — Unused `generation` parameter removed from `handleWakeOnLan` (lint error)
+
+### Added
+- `hostFingerprint` config option — pins the target's SSH host key instead of trusting it on first connection. Accepts `SHA256:...` with or without padding. When set, the known hosts file is not used for that device
+
+### Changed
+- `config.schema.json`, `README.md` — `wolVerifyDelay` description states the real window can be up to about twice the configured value when the target stays offline; `wolBroadcastAddress` says "should normally be" a broadcast address instead of "must"
+- `README.md` — `hostFingerprint` setup instructions; `shutdownCommand` documented as installation-specific; anyone who can edit `config.json` can run whatever the SSH account can, so restrict the account to shutdown only
+
+---
+
 ## [0.1.14] - 2026-09-26
 
 ### Fixed

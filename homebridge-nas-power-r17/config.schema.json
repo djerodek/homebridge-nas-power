@@ -85,7 +85,7 @@
               "type": "integer",
               "default": 120,
               "minimum": 5,
-              "description": "Duration in seconds of the boot verification window after WOL. The plugin checks every 5s within this window; each check can take up to 5s more, so the real window can be somewhat longer than this value. If the target has not answered by the end, the switch reports OFF. Default 120s suits most hardware."
+              "description": "Duration in seconds of the boot verification window after WOL. The plugin checks every 5s within this window; each check can take up to 5s more, so the real window can be up to about twice this value when the target stays offline. If the target has not answered by the end, the switch reports OFF. Default 120s suits most hardware."
             },
             "shutdownCooldownDelay": {
               "title": "Shutdown Cooldown Delay (seconds)",
@@ -99,7 +99,7 @@
               "type": "string",
               "default": "255.255.255.255",
               "pattern": "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$",
-              "description": "Broadcast address for WOL magic packet. Must be a broadcast address (e.g. 255.255.255.255 or 192.168.1.255) — do not enter a device IP address. Change for VLAN setups. IPv4 only.",
+              "description": "Destination for the WOL magic packet. Should normally be a broadcast address (e.g. 255.255.255.255 or 192.168.1.255) — do not enter a device IP address. Change for VLAN setups. IPv4 only.",
               "placeholder": "255.255.255.255"
             },
             "knownHostsPath": {
@@ -107,6 +107,13 @@
               "type": "string",
               "description": "Path to store verified SSH host fingerprints. Defaults to $HOMEBRIDGE_USER_STORAGE_PATH/nas-power-known-hosts.",
               "placeholder": "/home/homebridge/.homebridge/nas-power-known-hosts"
+            },
+            "hostFingerprint": {
+              "title": "SSH Host Fingerprint (optional)",
+              "type": "string",
+              "pattern": "^\\s*(SHA256:)?[A-Za-z0-9+/]{43}=?\\s*$",
+              "description": "Advanced: pin the target's SSH host key instead of trusting it on first connection. Use the SHA256 value from 'ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub' on the target, or the value logged on first connection. When set, the known hosts file is not used for this device.",
+              "placeholder": "SHA256:AbCdEf1234..."
             },
             "execTimeout": {
               "title": "SSH Exec Timeout (seconds)",
